@@ -71,6 +71,28 @@ function buildTree(items: WorkItem[]): Tree {
     }
   }
 
+  // Items trapped in a pure parent-cycle (e.g. A↔B, both loaded, neither with a
+  // parent outside the set) are never classified as roots and would otherwise
+  // silently vanish. Promote one entry per orphaned component so all items render.
+  const reachable = new Set<number>();
+  const mark = (start: WorkItem) => {
+    const stack = [start];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (reachable.has(node.id)) continue;
+      reachable.add(node.id);
+      for (const child of childrenOf.get(node.id) ?? []) stack.push(child);
+    }
+  };
+  for (const r of roots) mark(r);
+  if (reachable.size < items.length) {
+    for (const it of items) {
+      if (reachable.has(it.id)) continue;
+      roots.push(it);
+      mark(it);
+    }
+  }
+
   const sortFn = (a: WorkItem, b: WorkItem) =>
     typeRank(a.type) - typeRank(b.type) || a.id - b.id;
   roots.sort(sortFn);
@@ -222,11 +244,13 @@ export function HierarchyView() {
       </div>
 
       <div role="tree" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {visibleRoots.map((item) => (
+        {visibleRoots.map((item, i) => (
           <TreeRow
             key={item.id}
             item={item}
             depth={0}
+            pos={i + 1}
+            setSize={visibleRoots.length}
             ancestors={EMPTY_SET}
             childrenOf={childrenOf}
             expanded={expanded}
@@ -254,6 +278,8 @@ export function HierarchyView() {
 interface TreeRowProps {
   item: WorkItem;
   depth: number;
+  pos: number;
+  setSize: number;
   ancestors: ReadonlySet<number>;
   childrenOf: Map<number, WorkItem[]>;
   expanded: Set<number>;
@@ -268,6 +294,8 @@ interface TreeRowProps {
 function TreeRow({
   item,
   depth,
+  pos,
+  setSize,
   ancestors,
   childrenOf,
   expanded,
@@ -289,12 +317,15 @@ function TreeRow({
 
   const priority = item.priority ? PRIORITY_LABEL[item.priority] : undefined;
   const stateColor = adoColor(stateColors.get(item.state.toLowerCase()), "#6b6e78");
-  const childAncestors = new Set(ancestors).add(item.id);
+  const childAncestors = hasChildren ? new Set(ancestors).add(item.id) : null;
 
   return (
     <>
       <div
         role="treeitem"
+        aria-level={depth + 1}
+        aria-setsize={setSize}
+        aria-posinset={pos}
         aria-expanded={hasChildren ? isOpen : undefined}
         onClick={() => onOpen(item.id)}
         className="group flex cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 transition-colors hover:bg-surface-2"
@@ -352,11 +383,14 @@ function TreeRow({
       </div>
 
       {isOpen &&
-        children.map((child) => (
+        childAncestors &&
+        children.map((child, i) => (
           <TreeRow
             key={child.id}
             item={child}
             depth={depth + 1}
+            pos={i + 1}
+            setSize={children.length}
             ancestors={childAncestors}
             childrenOf={childrenOf}
             expanded={expanded}
