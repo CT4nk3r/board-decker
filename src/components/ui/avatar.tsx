@@ -8,23 +8,15 @@ interface AvatarProps {
   title?: string;
 }
 
-/** A small identity bubble. Uses the ADO avatar image when present, else initials. */
+/**
+ * A small identity bubble rendered from initials. We deliberately avoid ADO's
+ * avatar image URLs: they require authentication, and a bare <img> from the
+ * webview (which never sees the PAT) would just render broken.
+ */
 export function Avatar({ user, size = 22, className, title }: AvatarProps) {
   const name = user?.displayName ?? user?.uniqueName ?? user?.mail;
   const label = title ?? name ?? "Unassigned";
   const dim = { width: size, height: size, fontSize: Math.round(size * 0.42) };
-
-  if (user?.imageUrl) {
-    return (
-      <img
-        src={user.imageUrl}
-        alt={label}
-        title={label}
-        style={dim}
-        className={cn("rounded-full object-cover ring-1 ring-border", className)}
-      />
-    );
-  }
 
   if (!name) {
     return (
