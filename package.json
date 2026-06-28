@@ -6,8 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "preview": "vite preview",
     "harness": "vite --config vite.harness.config.ts",
     "test": "vitest",

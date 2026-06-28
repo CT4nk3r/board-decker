@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import * as ado from "@/lib/ado";
-import { STATE_CATEGORY_ORDER, type AdoState, type AdoWorkItemType } from "@/lib/ado";
+import { allTypesFailed, buildColumns, type AdoState, type AdoWorkItemType } from "@/lib/ado";
 import { keys } from "./keys";
 
 interface ColumnsResult {
@@ -40,8 +40,8 @@ export function useColumns() {
         ),
       );
 
-      const failedTypes = perType.filter((r) => r.states === null).map((r) => r.type);
-      if (types.length > 0 && failedTypes.length === types.length) {
+      const { columns, statesByType, failedTypes } = buildColumns(perType);
+      if (allTypesFailed(types.length, failedTypes.length)) {
         throw new Error("Couldn't load board columns from Azure DevOps.");
       }
       if (failedTypes.length > 0) {
@@ -50,25 +50,6 @@ export function useColumns() {
             "columns may be incomplete.",
         );
       }
-
-      const statesByType: Record<string, string[]> = {};
-      const merged = new Map<string, AdoState & { order: number }>();
-      let idx = 0;
-      for (const { type, states } of perType) {
-        if (!states) continue;
-        statesByType[type] = states.map((s) => s.name);
-        for (const s of states) {
-          const key = s.name.toLowerCase();
-          if (!merged.has(key)) {
-            const catRank = STATE_CATEGORY_ORDER[String(s.category)] ?? 2;
-            merged.set(key, { ...s, order: catRank * 1000 + idx });
-          }
-          idx++;
-        }
-      }
-      const columns = [...merged.values()]
-        .sort((a, b) => a.order - b.order)
-        .map(({ order: _order, ...rest }) => rest);
       return { types, columns, statesByType, failedTypes };
     },
   });

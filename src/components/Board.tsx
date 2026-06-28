@@ -14,7 +14,7 @@ import { useBoardItems, useColumns } from "@/hooks/queries";
 import { useChangeState, useDeleteWorkItem } from "@/hooks/mutations";
 import { useBoardStore } from "@/store/board";
 import type { AdoState, WorkItem } from "@/lib/ado";
-import { MAX_BOARD_ITEMS } from "@/lib/ado";
+import { MAX_BOARD_ITEMS, isAllowedTarget } from "@/lib/ado";
 import { Column } from "@/components/Column";
 import { WorkItemCardBody } from "@/components/WorkItemCard";
 import { Button } from "@/components/ui/button";
@@ -86,14 +86,7 @@ export function Board() {
   }, [columns, items, search]);
 
   const activeItem = items?.find((i) => i.id === activeId) ?? null;
-
-  // States the dragged card's type supports (null = unknown/failed → don't block).
-  const allowedTargets = useMemo<Set<string> | null>(() => {
-    if (!activeItem) return null;
-    const list = columnsData?.statesByType?.[activeItem.type];
-    if (!list || list.length === 0) return null;
-    return new Set(list.map((s) => s.toLowerCase()));
-  }, [activeItem, columnsData]);
+  const statesByType = columnsData?.statesByType;
 
   function onDragStart(e: DragStartEvent) {
     setActiveId(Number(e.active.id));
@@ -107,7 +100,7 @@ export function Board() {
     const targetState = String(over.id);
     const item = items?.find((i) => i.id === id);
     if (!item || item.state.toLowerCase() === targetState.toLowerCase()) return;
-    if (allowedTargets && !allowedTargets.has(targetState.toLowerCase())) {
+    if (!isAllowedTarget(statesByType, item.type, targetState)) {
       toast.error("Invalid move", `A ${item.type} can't be set to "${targetState}".`);
       return;
     }
@@ -197,7 +190,7 @@ export function Board() {
                 column={col}
                 items={grouped.get(col.name.toLowerCase()) ?? []}
                 typeColors={typeColors}
-                disabled={!!allowedTargets && !allowedTargets.has(col.name.toLowerCase())}
+                disabled={!!activeItem && !isAllowedTarget(statesByType, activeItem.type, col.name)}
                 onOpen={select}
                 onDelete={setPendingDelete}
               />
