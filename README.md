@@ -73,8 +73,9 @@ GitHub Actions builds the Tauri app on every push/PR and publishes installers on
 (`.github/workflows/`):
 
 - **`ci.yml`** — on push/PR to `master`: type-checks and builds the frontend, then
-  builds the native app on **macOS (Apple Silicon + Intel universal)**, **Windows**, and
-  **Linux**. The resulting bundles are uploaded as workflow artifacts (7-day retention).
+  builds the native app on **macOS (Apple Silicon + Intel universal)**, **Windows (x64 +
+  ARM64)**, and **Linux (x64 + ARM64)**. The resulting bundles are uploaded as workflow
+  artifacts (7-day retention).
 - **`release.yml`** — on a `v*` tag: builds all three platforms with
   [`tauri-action`](https://github.com/tauri-apps/tauri-action) and publishes the installers
   to a **GitHub Release**. Cut one by tagging:
