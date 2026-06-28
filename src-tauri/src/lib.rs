@@ -151,11 +151,13 @@ struct ImageResponse {
 
 /// Only ever attach the PAT to genuine Azure DevOps hosts, so a poisoned avatar
 /// URL in a work item payload can't exfiltrate the token to a third party.
+/// Scoped tightly to ADO endpoints (not all of `*.azure.com`) to shrink blast radius.
 fn is_azure_host(url: &str) -> bool {
     match reqwest::Url::parse(url) {
         Ok(parsed) => parsed.scheme() == "https" && matches!(parsed.host_str(), Some(host)
             if host == "dev.azure.com"
-                || host.ends_with(".azure.com")
+                || host.ends_with(".dev.azure.com")
+                || host == "visualstudio.com"
                 || host.ends_with(".visualstudio.com")),
         Err(_) => false,
     }
@@ -232,4 +234,25 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_azure_host;
+
+    #[test]
+    fn allows_real_ado_hosts() {
+        assert!(is_azure_host("https://dev.azure.com/contoso/project"));
+        assert!(is_azure_host("https://contoso.visualstudio.com/foo"));
+        assert!(is_azure_host("https://vssps.dev.azure.com/x"));
+    }
+
+    #[test]
+    fn rejects_foreign_and_insecure_hosts() {
+        assert!(!is_azure_host("https://evil.com"));
+        assert!(!is_azure_host("http://dev.azure.com")); // not https
+        assert!(!is_azure_host("https://dev.azure.com.evil.com")); // suffix spoof
+        assert!(!is_azure_host("https://dev.azure.com@evil.com")); // userinfo trick
+        assert!(!is_azure_host("not a url"));
+    }
 }
