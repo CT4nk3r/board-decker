@@ -34,19 +34,29 @@ jobs:
             platform: windows-latest
             args: ""
             rust-targets: ""
+          - label: Linux (ARM64)
+            platform: ubuntu-22.04-arm
+            args: ""
+            rust-targets: ""
+          - label: Windows (ARM64)
+            platform: windows-11-arm
+            # Limit to NSIS — WiX/MSI is unreliable for arm64.
+            args: --bundles nsis
+            rust-targets: ""
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            xdg-utils
 
       - name: Setup Node
         uses: actions/setup-node@v4
