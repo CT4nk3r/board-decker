@@ -1,8 +1,8 @@
-# Deck
+# Board Decker
 
 A fast, native **desktop board over Azure DevOps work items**. Linear/Trello-style
 UX, but ADO stays the single source of truth — no separate database, no sync service.
-Deck reads and writes ADO directly.
+Board Decker reads and writes ADO directly.
 
 > Status: **MVP (M0–M3)** — onboarding, board, drag-to-change-state, detail/edit,
 > create, and scope filters all work two-way against ADO.
@@ -90,7 +90,7 @@ GitHub Actions builds the Tauri app on every push/PR and publishes installers on
   ```
 
   The release is published automatically once all platforms finish, and a final step tags
-  each asset filename with its OS (e.g. `Deck_windows_0.1.1_x64-setup.exe`) so they group by
+  each asset filename with its OS (e.g. `BoardDecker_windows_0.1.1_x64-setup.exe`) so they group by
   platform. Builds are unsigned by default; add Apple/Windows signing secrets (see the
   commented `env` block in `release.yml`) to sign.
 

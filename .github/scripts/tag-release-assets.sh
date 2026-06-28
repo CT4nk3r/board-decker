@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
 # Rename the GitHub release assets for a tag so each filename carries an OS tag
-# (macos / windows / linux), e.g. "Deck_windows_0.1.0_x64-setup.exe". This makes
+# (macos / windows / linux), e.g. "BoardDecker_windows_0.1.0_x64-setup.exe". This makes
 # the assets sort and group by platform in the Releases tab.
 #
 # Tauri's bundlers hardcode their output filenames, so we fix them up after the
 # release is published. The OS is inferred from the file extension and a
-# "Deck_<os>_" prefix is injected. The ".sig" siblings are renamed to match.
+# "BoardDecker_<os>_" prefix is injected. The ".sig" siblings are renamed to match.
 #
 # Because the in-app updater's "latest.json" points at some of these same files
 # (the .app.tar.gz, .AppImage and NSIS -setup.exe), this also rewrites the URLs
@@ -40,11 +40,11 @@ os_for() {
 newname_for() {
   local name="$1" os
   case "$name" in
-    Deck_macos_* | Deck_windows_* | Deck_linux_*) printf '%s' "$name"; return ;;
+    BoardDecker_macos_* | BoardDecker_windows_* | BoardDecker_linux_*) printf '%s' "$name"; return ;;
   esac
   os="$(os_for "$name")"
   if [ -z "$os" ]; then printf '%s' "$name"; return; fi
-  printf '%s' "${name/#Deck[-_]/Deck_${os}_}"
+  printf '%s' "${name/#BoardDecker[-_]/BoardDecker_${os}_}"
 }
 
 # Echo a download URL with its final path segment transformed by newname_for.
@@ -62,20 +62,20 @@ if [ "${SELFTEST:-0}" = "1" ]; then
   check() { # expected actual label
     if [ "$1" = "$2" ]; then echo "ok   $3"; else echo "FAIL $3: want '$1' got '$2'"; fail=1; fi
   }
-  check "Deck_linux_0.1.0-1.x86_64.rpm"      "$(newname_for Deck-0.1.0-1.x86_64.rpm)"     "rpm"
-  check "Deck_linux_0.1.0_aarch64.AppImage"  "$(newname_for Deck_0.1.0_aarch64.AppImage)" "appimage"
-  check "Deck_linux_0.1.0_amd64.deb"         "$(newname_for Deck_0.1.0_amd64.deb)"        "deb"
-  check "Deck_macos_0.1.0_universal.dmg"     "$(newname_for Deck_0.1.0_universal.dmg)"    "dmg"
-  check "Deck_macos_universal.app.tar.gz"    "$(newname_for Deck_universal.app.tar.gz)"   "app.tar.gz"
-  check "Deck_macos_universal.app.tar.gz.sig" "$(newname_for Deck_universal.app.tar.gz.sig)" "sig"
-  check "Deck_windows_0.1.0_x64-setup.exe"   "$(newname_for Deck_0.1.0_x64-setup.exe)"    "nsis"
-  check "Deck_windows_0.1.0_x64_en-US.msi"   "$(newname_for Deck_0.1.0_x64_en-US.msi)"    "msi"
+  check "BoardDecker_linux_0.1.0-1.x86_64.rpm"      "$(newname_for BoardDecker-0.1.0-1.x86_64.rpm)"     "rpm"
+  check "BoardDecker_linux_0.1.0_aarch64.AppImage"  "$(newname_for BoardDecker_0.1.0_aarch64.AppImage)" "appimage"
+  check "BoardDecker_linux_0.1.0_amd64.deb"         "$(newname_for BoardDecker_0.1.0_amd64.deb)"        "deb"
+  check "BoardDecker_macos_0.1.0_universal.dmg"     "$(newname_for BoardDecker_0.1.0_universal.dmg)"    "dmg"
+  check "BoardDecker_macos_universal.app.tar.gz"    "$(newname_for BoardDecker_universal.app.tar.gz)"   "app.tar.gz"
+  check "BoardDecker_macos_universal.app.tar.gz.sig" "$(newname_for BoardDecker_universal.app.tar.gz.sig)" "sig"
+  check "BoardDecker_windows_0.1.0_x64-setup.exe"   "$(newname_for BoardDecker_0.1.0_x64-setup.exe)"    "nsis"
+  check "BoardDecker_windows_0.1.0_x64_en-US.msi"   "$(newname_for BoardDecker_0.1.0_x64_en-US.msi)"    "msi"
   check "latest.json"                        "$(newname_for latest.json)"                 "latest.json untouched"
-  check "Deck_linux_0.1.0_amd64.deb"         "$(newname_for Deck_linux_0.1.0_amd64.deb)"  "idempotent"
-  check "https://x/y/v0.1.0/Deck_linux_0.1.0_aarch64.AppImage" \
-        "$(rewrite_url https://x/y/v0.1.0/Deck_0.1.0_aarch64.AppImage)" "url rewrite"
-  check "https://x/y/v0.1.0/Deck_macos_universal.app.tar.gz" \
-        "$(rewrite_url https://x/y/v0.1.0/Deck_universal.app.tar.gz)" "url rewrite mac"
+  check "BoardDecker_linux_0.1.0_amd64.deb"         "$(newname_for BoardDecker_linux_0.1.0_amd64.deb)"  "idempotent"
+  check "https://x/y/v0.1.0/BoardDecker_linux_0.1.0_aarch64.AppImage" \
+        "$(rewrite_url https://x/y/v0.1.0/BoardDecker_0.1.0_aarch64.AppImage)" "url rewrite"
+  check "https://x/y/v0.1.0/BoardDecker_macos_universal.app.tar.gz" \
+        "$(rewrite_url https://x/y/v0.1.0/BoardDecker_universal.app.tar.gz)" "url rewrite mac"
   exit "$fail"
 fi
 
