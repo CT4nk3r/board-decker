@@ -8,6 +8,7 @@ import { SCOPE_LABELS } from "@/lib/ado";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UpdateButton } from "@/components/UpdateButton";
 
 export function TopBar() {
   const connection = useConnectionStore((s) => s.connection)!;
@@ -37,6 +38,8 @@ export function TopBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <UpdateButton />
+
         <div className="relative">
           <Search
             size={14}
