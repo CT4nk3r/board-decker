@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useBoardStore } from "@/store/board";
+import { useConnectionStore } from "@/store/connection";
 import { useColumns } from "@/hooks/queries";
 import { useCreateWorkItem } from "@/hooks/mutations";
 import { FIELD, setField, type AdoPatchOp } from "@/lib/ado";
@@ -36,6 +37,8 @@ const PREFERRED = ["User Story", "Product Backlog Item", "Issue", "Task", "Bug"]
 export function CreateDialog() {
   const open = useBoardStore((s) => s.createOpen);
   const setOpen = useBoardStore((s) => s.setCreateOpen);
+  const scope = useBoardStore((s) => s.scope);
+  const conn = useConnectionStore((s) => s.connection);
   const { data: columnsData } = useColumns();
   const create = useCreateWorkItem();
 
@@ -73,6 +76,14 @@ export function CreateDialog() {
       .map((t) => t.trim())
       .filter(Boolean);
     if (tagList.length) ops.push(setField(FIELD.Tags, tagList.join("; ")));
+
+    // Seed scope fields so the new item lands in the current view (e.g. the
+    // selected sprint/area) instead of appearing only until the next refetch.
+    const project = conn?.project;
+    if (project && scope.arg) {
+      if (scope.id === "sprint") ops.push(setField(FIELD.IterationPath, `${project}\\${scope.arg}`));
+      if (scope.id === "area") ops.push(setField(FIELD.AreaPath, `${project}\\${scope.arg}`));
+    }
 
     try {
       await create.mutateAsync({ type, ops });

@@ -6,7 +6,7 @@
 
 import { adoRequest, AdoError } from "./invoke";
 import { mapWorkItem, normalizeAdoUser } from "./mapper";
-import { CARD_FIELDS, JSON_PATCH_CONTENT_TYPE, type AdoPatchOp } from "./fields";
+import { CARD_FIELDS, JSON_PATCH_CONTENT_TYPE, revTest, type AdoPatchOp } from "./fields";
 import type {
   AdoComment,
   AdoConnection,
@@ -135,17 +135,23 @@ export async function createWorkItem(
   return mapWorkItem(wi);
 }
 
-/** Update a work item by id from a JSON-Patch document. */
+/**
+ * Update a work item by id from a JSON-Patch document. When `rev` is supplied a
+ * `test` op on `/rev` is prepended so ADO rejects the write (409/412) if another
+ * change landed since the item was read, instead of silently overwriting it.
+ */
 export async function updateWorkItem(
   conn: AdoConnection,
   id: number,
   ops: AdoPatchOp[],
+  rev?: number,
 ): Promise<WorkItem> {
   const url = withVersion(`${projBase(conn)}/_apis/wit/workitems/${id}`);
+  const body = typeof rev === "number" ? [revTest(rev), ...ops] : ops;
   const wi = await adoRequest<AdoWorkItem>({
     method: "PATCH",
     url,
-    body: ops,
+    body,
     contentType: JSON_PATCH_CONTENT_TYPE,
   });
   return mapWorkItem(wi);

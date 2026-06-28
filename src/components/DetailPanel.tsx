@@ -104,7 +104,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
   }, [item]);
 
   function save(ops: AdoPatchOp[]) {
-    if (ops.length) update.mutate({ id, ops });
+    if (ops.length) update.mutate({ id, ops, rev: item?.rev });
   }
 
   async function handleDelete() {
@@ -372,8 +372,12 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
             onSend={async () => {
               const text = commentDraft.trim();
               if (!text) return;
-              await addComment.mutateAsync(text).catch(() => {});
-              setCommentDraft("");
+              try {
+                await addComment.mutateAsync(text);
+                setCommentDraft("");
+              } catch {
+                /* keep the draft so the typed comment survives the failure */
+              }
             }}
           />
         </div>
