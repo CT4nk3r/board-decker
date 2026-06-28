@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { User, Activity, Clock, PenLine, Layers, LogOut, CalendarRange } from "lucide-react";
+import { User, Activity, Clock, PenLine, Layers, LogOut, CalendarRange, X } from "lucide-react";
 import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import { useIterations } from "@/hooks/queries";
@@ -86,12 +86,12 @@ export function Sidebar() {
         <p className="px-2 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-faint">
           Sprint
         </p>
-        <div className="px-1">
+        <div className="flex items-center gap-1 px-1">
           <Select
             value={scope.id === "sprint" ? scope.arg : undefined}
             onValueChange={(value) => setScope({ id: "sprint", arg: value })}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
                 <CalendarRange size={14} className="shrink-0 text-faint" />
                 <SelectValue placeholder="Pick a sprint" />
@@ -115,6 +115,17 @@ export function Sidebar() {
               ))}
             </SelectContent>
           </Select>
+          {scope.id === "sprint" && (
+            <button
+              type="button"
+              onClick={() => setScope({ id: "active" })}
+              title="Clear sprint"
+              aria-label="Clear sprint"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-faint transition-colors hover:border-border-strong hover:text-fg"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </nav>
 

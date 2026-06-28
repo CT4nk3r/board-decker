@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Deck",
+  "productName": "Board Decker",
+  "mainBinaryName": "BoardDecker",
   "version": "0.1.1",
-  "identifier": "com.deck.adoboard",
+  "identifier": "com.boarddecker.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Deck",
+        "title": "Board Decker",
         "width": 1280,
         "height": 820,
         "minWidth": 900,
@@ -38,7 +39,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/CT4nk3r/ado-boarder/releases/latest/download/latest.json"
+        "https://github.com/CT4nk3r/board-decker/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDMzRDODY1QTc1ODNDQjcKUldTM1BGaW5aY2cwYkpkS0ZRME9Ya3prZmxOcGE3ZTFpR3gyMVhuNVVjUW9OTzh5MGtYRGVycGoK"
     }

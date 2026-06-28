@@ -148,7 +148,7 @@ jobs:
       - name: Upload bundles
         uses: actions/upload-artifact@v4
         with:
-          name: deck-${{ matrix.platform }}
+          name: board-decker-${{ matrix.platform }}
           # Default host target lands in target/release; an explicit --target
           # (macOS universal) lands in target/<triple>/release.
           path: |

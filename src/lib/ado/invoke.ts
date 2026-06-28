@@ -83,3 +83,20 @@ export function hasPat(): Promise<boolean> {
 export function deletePat(): Promise<void> {
   return invoke("delete_pat");
 }
+
+/** Shape returned by the Rust `ado_fetch_image` command. */
+interface AdoImageResponse {
+  status: number;
+  ok: boolean;
+  dataUrl: string | null;
+}
+
+/**
+ * Fetch an ADO avatar image through Rust (which attaches the PAT) and return it
+ * as a base64 `data:` URL the webview can render. Resolves to `null` when the
+ * image is missing/unauthorized so callers can fall back to initials.
+ */
+export async function fetchAdoImage(url: string): Promise<string | null> {
+  const res = await invoke<AdoImageResponse>("ado_fetch_image", { url });
+  return res.ok ? res.dataUrl : null;
+}

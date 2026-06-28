@@ -59,7 +59,7 @@ export function Onboarding() {
           </div>
           <div>
             <h1 className="text-lg font-semibold leading-tight">Connect to Azure DevOps</h1>
-            <p className="text-sm text-muted">Deck reads & writes your work items directly.</p>
+            <p className="text-sm text-muted">Board Decker reads & writes your work items directly.</p>
           </div>
         </div>
 

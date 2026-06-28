@@ -1,4 +1,4 @@
-//! Deck — Tauri backend.
+//! Board Decker — Tauri backend.
 //!
 //! Azure DevOps REST does not send permissive CORS headers, so the webview
 //! cannot call it directly. All ADO traffic is routed through these Rust
@@ -10,7 +10,7 @@ use base64::Engine as _;
 use serde::Serialize;
 
 /// Keychain service + account under which the single active PAT is stored.
-const KEYRING_SERVICE: &str = "com.deck.adoboard";
+const KEYRING_SERVICE: &str = "com.boarddecker.app";
 const KEYRING_USER: &str = "ado-pat";
 
 fn pat_entry() -> Result<keyring::Entry, String> {
@@ -66,7 +66,7 @@ async fn perform(
     pat: String,
 ) -> Result<AdoResponse, String> {
     let client = reqwest::Client::builder()
-        .user_agent("Deck/0.1 (+https://github.com/CT4nk3r/ado-boarder)")
+        .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -130,6 +130,77 @@ async fn ado_request_with_pat(
     perform(method, url, body, content_type, pat).await
 }
 
+/// A fetched avatar image, encoded as a `data:` URL the webview can render
+/// directly. `data_url` is `None` for non-2xx responses (e.g. a stale URL).
+#[derive(Serialize)]
+struct ImageResponse {
+    status: u16,
+    ok: bool,
+    #[serde(rename = "dataUrl")]
+    data_url: Option<String>,
+}
+
+/// Only ever attach the PAT to genuine Azure DevOps hosts, so a poisoned avatar
+/// URL in a work item payload can't exfiltrate the token to a third party.
+fn is_azure_host(url: &str) -> bool {
+    match reqwest::Url::parse(url) {
+        Ok(parsed) => parsed.scheme() == "https" && matches!(parsed.host_str(), Some(host)
+            if host == "dev.azure.com"
+                || host.ends_with(".azure.com")
+                || host.ends_with(".visualstudio.com")),
+        Err(_) => false,
+    }
+}
+
+/// Fetch an ADO avatar image (which requires authentication) using the stored
+/// PAT and hand it back as a base64 `data:` URL. The webview never authenticates
+/// to ADO itself, so this is the only way it can show real profile pictures.
+#[tauri::command]
+async fn ado_fetch_image(url: String) -> Result<ImageResponse, String> {
+    if !is_azure_host(&url) {
+        return Err("Refusing to fetch image from a non-Azure DevOps host.".to_string());
+    }
+
+    let pat = pat_entry()?
+        .get_password()
+        .map_err(|_| "No PAT stored. Please reconnect to Azure DevOps.".to_string())?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .header(reqwest::header::AUTHORIZATION, auth_header(&pat))
+        .header(reqwest::header::ACCEPT, "image/*")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    if !ok {
+        return Ok(ImageResponse { status, ok, data_url: None });
+    }
+
+    // Trust the server's content type only when it actually names an image;
+    // ADO occasionally returns application/octet-stream, which <img> won't render.
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .filter(|ct| ct.starts_with("image/"))
+        .unwrap_or("image/png")
+        .to_string();
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let data_url = format!("data:{content_type};base64,{encoded}");
+
+    Ok(ImageResponse { status, ok, data_url: Some(data_url) })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -147,7 +218,8 @@ pub fn run() {
             has_pat,
             delete_pat,
             ado_request,
-            ado_request_with_pat
+            ado_request_with_pat,
+            ado_fetch_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
