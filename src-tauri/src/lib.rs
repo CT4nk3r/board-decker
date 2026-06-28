@@ -1,0 +1,146 @@
+//! Deck — Tauri backend.
+//!
+//! Azure DevOps REST does not send permissive CORS headers, so the webview
+//! cannot call it directly. All ADO traffic is routed through these Rust
+//! commands: the Personal Access Token is stored in the OS keychain and the
+//! `Authorization: Basic base64(":" + PAT)` header is attached here — the PAT
+//! never lives in JS.
+
+use base64::Engine as _;
+use serde::Serialize;
+
+/// Keychain service + account under which the single active PAT is stored.
+const KEYRING_SERVICE: &str = "com.deck.adoboard";
+const KEYRING_USER: &str = "ado-pat";
+
+fn pat_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|e| e.to_string())
+}
+
+/// Store (or overwrite) the active PAT in the OS keychain.
+#[tauri::command]
+fn save_pat(pat: String) -> Result<(), String> {
+    pat_entry()?.set_password(&pat).map_err(|e| e.to_string())
+}
+
+/// Whether a PAT is currently stored. Never returns the secret itself.
+#[tauri::command]
+fn has_pat() -> bool {
+    match pat_entry() {
+        Ok(entry) => entry.get_password().is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Remove the stored PAT (sign out).
+#[tauri::command]
+fn delete_pat() -> Result<(), String> {
+    let entry = pat_entry()?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// A completed HTTP response handed back to the frontend. Note: 4xx/5xx are
+/// returned as a normal value (with `ok = false`) so the TS client can read the
+/// ADO error body; only transport failures map to `Err`.
+#[derive(Serialize)]
+struct AdoResponse {
+    status: u16,
+    ok: bool,
+    body: serde_json::Value,
+}
+
+fn auth_header(pat: &str) -> String {
+    let token = base64::engine::general_purpose::STANDARD.encode(format!(":{pat}"));
+    format!("Basic {token}")
+}
+
+async fn perform(
+    method: String,
+    url: String,
+    body: Option<serde_json::Value>,
+    content_type: Option<String>,
+    pat: String,
+) -> Result<AdoResponse, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Deck/0.1 (+https://github.com/CT4nk3r/ado-boarder)")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let m = reqwest::Method::from_bytes(method.to_uppercase().as_bytes())
+        .map_err(|e| format!("invalid HTTP method: {e}"))?;
+
+    let mut req = client
+        .request(m, &url)
+        .header(reqwest::header::AUTHORIZATION, auth_header(&pat))
+        .header(reqwest::header::ACCEPT, "application/json");
+
+    if let Some(value) = body {
+        // Serialize manually so an explicit content-type (e.g. the JSON-Patch
+        // media type ADO requires) is preserved instead of being overwritten.
+        let ct = content_type.unwrap_or_else(|| "application/json".to_string());
+        let bytes = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
+        req = req
+            .header(reqwest::header::CONTENT_TYPE, ct)
+            .body(bytes);
+    }
+
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let parsed = if text.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))
+    };
+
+    Ok(AdoResponse { status, ok, body: parsed })
+}
+
+/// Make an ADO request using the PAT stored in the keychain. `url` is the full
+/// ADO URL (built by the TS layer, which knows org/project); the secret is
+/// attached here.
+#[tauri::command]
+async fn ado_request(
+    method: String,
+    url: String,
+    body: Option<serde_json::Value>,
+    content_type: Option<String>,
+) -> Result<AdoResponse, String> {
+    let pat = pat_entry()?
+        .get_password()
+        .map_err(|_| "No PAT stored. Please reconnect to Azure DevOps.".to_string())?;
+    perform(method, url, body, content_type, pat).await
+}
+
+/// Make an ADO request with a PAT supplied inline. Used during onboarding to
+/// validate credentials *before* committing them to the keychain.
+#[tauri::command]
+async fn ado_request_with_pat(
+    method: String,
+    url: String,
+    body: Option<serde_json::Value>,
+    content_type: Option<String>,
+    pat: String,
+) -> Result<AdoResponse, String> {
+    perform(method, url, body, content_type, pat).await
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            save_pat,
+            has_pat,
+            delete_pat,
+            ado_request,
+            ado_request_with_pat
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
