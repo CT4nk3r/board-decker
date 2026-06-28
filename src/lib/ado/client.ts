@@ -5,13 +5,14 @@
  */
 
 import { adoRequest } from "./invoke";
-import { mapWorkItem } from "./mapper";
+import { mapWorkItem, normalizeAdoUser } from "./mapper";
 import { CARD_FIELDS, JSON_PATCH_CONTENT_TYPE, type AdoPatchOp } from "./fields";
 import type {
   AdoComment,
   AdoConnection,
   AdoIteration,
   AdoState,
+  AdoUser,
   AdoWorkItem,
   AdoWorkItemType,
   WorkItem,
@@ -165,6 +166,57 @@ export async function getIterations(conn: AdoConnection): Promise<AdoIteration[]
   const url = withVersion(`${orgBase(conn)}/${enc(conn.project)}${teamSeg}/_apis/work/teamsettings/iterations`);
   const res = await adoRequest<{ value?: AdoIteration[] }>({ method: "GET", url });
   return res.value ?? [];
+}
+
+/** A raw team member entry as returned by the teams/members endpoint. */
+interface RawTeamMember {
+  identity?: { isContainer?: boolean } & Record<string, unknown>;
+}
+
+/** Teams defined in the project (used to gather the set of assignable people). */
+export async function getTeams(conn: AdoConnection): Promise<{ id: string; name: string }[]> {
+  const url = withVersion(`${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams`);
+  const res = await adoRequest<{ value?: { id: string; name: string }[] }>({
+    method: "GET",
+    url,
+  });
+  return res.value ?? [];
+}
+
+/** Members of a single team, normalized to {@link AdoUser} (groups excluded). */
+export async function getTeamMembers(conn: AdoConnection, team: string): Promise<AdoUser[]> {
+  const url = withVersion(
+    `${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams/${enc(team)}/members`,
+  );
+  const res = await adoRequest<{ value?: RawTeamMember[] }>({ method: "GET", url });
+  return (res.value ?? [])
+    .filter((m) => m.identity && !m.identity.isContainer)
+    .map((m) => normalizeAdoUser(m.identity))
+    .filter((u): u is AdoUser => u != null);
+}
+
+/**
+ * Assignable people for the active workspace. When the connection pins a team we
+ * return that team's members; otherwise we union the members of every team in the
+ * project. Deduped by identity and sorted by display name.
+ */
+export async function getProjectMembers(conn: AdoConnection): Promise<AdoUser[]> {
+  const teams = conn.team ? [conn.team] : (await getTeams(conn)).map((t) => t.id);
+  const lists = await Promise.all(
+    teams.map((team) => getTeamMembers(conn, team).catch(() => [] as AdoUser[])),
+  );
+
+  const byKey = new Map<string, AdoUser>();
+  for (const list of lists) {
+    for (const user of list) {
+      const key = (user.id ?? user.uniqueName ?? user.displayName ?? "").toLowerCase();
+      if (key && !byKey.has(key)) byKey.set(key, user);
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    (a.displayName ?? a.uniqueName ?? "").localeCompare(b.displayName ?? b.uniqueName ?? ""),
+  );
 }
 
 /** Comments on a work item (newest API preview surface). */

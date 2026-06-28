@@ -17,12 +17,14 @@ import {
   FIELD,
   setField,
   parseDevLinks,
+  assignOps,
   type AdoPatchOp,
   type DevLink,
   type WorkItem,
 } from "@/lib/ado";
 import { cn, formatDate } from "@/lib/utils";
 import { openExternal } from "@/lib/open";
+import { AssigneePicker } from "@/components/AssigneePicker";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,12 +215,10 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
           </Field>
 
           <Field label="Assignee">
-            <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5">
-              <Avatar user={item.assignee} size={20} />
-              <span className="truncate text-sm text-fg">
-                {item.assignee?.displayName ?? item.assignee?.uniqueName ?? "Unassigned"}
-              </span>
-            </div>
+            <AssigneePicker
+              value={item.assignee}
+              onChange={(user) => save(assignOps(user))}
+            />
           </Field>
 
           <Field label="Iteration">
