@@ -76,13 +76,14 @@ GitHub Actions builds the Tauri app on every push/PR and publishes installers on
   builds the native app on **macOS (Apple Silicon + Intel universal)**, **Windows**, and
   **Linux**. The resulting bundles are uploaded as workflow artifacts (7-day retention).
 - **`release.yml`** — on a `v*` tag: builds all three platforms with
-  [`tauri-action`](https://github.com/tauri-apps/tauri-action) and uploads the installers
-  to a **draft GitHub Release**. Cut one by tagging:
+  [`tauri-action`](https://github.com/tauri-apps/tauri-action) and publishes the installers
+  to a **GitHub Release**. Cut one by tagging:
 
   ```bash
   # keep "version" in src-tauri/tauri.conf.json in sync with the tag, then:
   git tag v0.1.0 && git push origin v0.1.0
   ```
 
-  Review the drafted release, then publish it. Builds are unsigned by default; add
-  Apple/Windows signing secrets (see the commented `env` block in `release.yml`) to sign.
+  The release is published automatically once all platforms finish. Builds are unsigned by
+  default; add Apple/Windows signing secrets (see the commented `env` block in
+  `release.yml`) to sign.
