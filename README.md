@@ -47,6 +47,9 @@ React UI ──invoke──▶ Rust `ado_request(method, url, body, contentType)
 - **Scopes/filters:** assigned-to-me, active, recently changed, created-by-me, all, plus a **sprint picker** from team iterations. Client-side search.
 - **Detail panel:** title, description (HTML), state, priority, assignee, tags, iteration, parent, linked PRs/branches, and comments — editable via JSON-Patch `PATCH`.
 - **Create work item:** type + title + description + priority + tags → `POST _apis/wit/workitems/$type`.
+- **Auto-update:** on launch the app checks the latest GitHub release; if a newer signed
+  version exists, an unobtrusive **Update** button appears in the top bar — one click
+  downloads, installs, and relaunches. No background nagging or popups.
 
 ## ADO layer reuse
 
@@ -83,10 +86,22 @@ GitHub Actions builds the Tauri app on every push/PR and publishes installers on
 
   ```bash
   # keep "version" in src-tauri/tauri.conf.json in sync with the tag, then:
-  git tag v0.1.0 && git push origin v0.1.0
+  git tag v0.1.1 && git push origin v0.1.1
   ```
 
   The release is published automatically once all platforms finish, and a final step tags
-  each asset filename with its OS (e.g. `Deck_windows_0.1.0_x64-setup.exe`) so they group by
+  each asset filename with its OS (e.g. `Deck_windows_0.1.1_x64-setup.exe`) so they group by
   platform. Builds are unsigned by default; add Apple/Windows signing secrets (see the
   commented `env` block in `release.yml`) to sign.
+
+### Update signing
+
+The in-app updater only installs releases signed with the project's updater key. The build
+signs each bundle and emits a `latest.json` manifest when these repo secrets are present:
+
+- `TAURI_SIGNING_PRIVATE_KEY` — the private key from `npx tauri signer generate`.
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — its password (empty string if none).
+
+The matching public key lives in `tauri.conf.json` (`plugins.updater.pubkey`) and the app
+polls `releases/latest/download/latest.json`. Updates only flow to versions **≥** the first
+release that shipped the updater (v0.1.1); older installs must be updated manually.

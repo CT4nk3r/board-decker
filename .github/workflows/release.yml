@@ -81,6 +81,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing — produces the per-bundle .sig files and latest.json
+          # that the in-app updater verifies against the pubkey in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Optional code-signing secrets — add them to the repo to sign builds:
           #   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
           #            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
@@ -95,7 +99,8 @@ jobs:
 
   # Tauri's bundlers hardcode their output filenames, so rename the published
   # assets to carry an OS tag (Deck_<os>_...) — this groups them by platform in
-  # the Releases tab. The script is idempotent and safe to re-run.
+  # the Releases tab. It also rewrites the updater's latest.json URLs to match,
+  # so auto-update keeps working. The script is idempotent and safe to re-run.
   tag-assets:
     name: Tag asset filenames with OS
     needs: release
