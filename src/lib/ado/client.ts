@@ -173,23 +173,40 @@ interface RawTeamMember {
   identity?: { isContainer?: boolean } & Record<string, unknown>;
 }
 
+/** ADO's default page size for list endpoints; also the safe max for `$top`. */
+const PAGE_SIZE = 100;
+
+/**
+ * Fetch every page of an ADO list endpoint. These endpoints cap results at 100
+ * and require explicit `$top`/`$skip` paging, so we loop until a short page
+ * signals the end. `baseUrl` must not yet carry an api-version.
+ */
+async function pagedAdoList<T>(baseUrl: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let skip = 0; ; skip += PAGE_SIZE) {
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    const url = withVersion(`${baseUrl}${sep}$top=${PAGE_SIZE}&$skip=${skip}`);
+    const res = await adoRequest<{ value?: T[] }>({ method: "GET", url });
+    const page = res.value ?? [];
+    out.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 /** Teams defined in the project (used to gather the set of assignable people). */
 export async function getTeams(conn: AdoConnection): Promise<{ id: string; name: string }[]> {
-  const url = withVersion(`${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams`);
-  const res = await adoRequest<{ value?: { id: string; name: string }[] }>({
-    method: "GET",
-    url,
-  });
-  return res.value ?? [];
+  return pagedAdoList<{ id: string; name: string }>(
+    `${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams`,
+  );
 }
 
 /** Members of a single team, normalized to {@link AdoUser} (groups excluded). */
 export async function getTeamMembers(conn: AdoConnection, team: string): Promise<AdoUser[]> {
-  const url = withVersion(
+  const members = await pagedAdoList<RawTeamMember>(
     `${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams/${enc(team)}/members`,
   );
-  const res = await adoRequest<{ value?: RawTeamMember[] }>({ method: "GET", url });
-  return (res.value ?? [])
+  return members
     .filter((m) => m.identity && !m.identity.isContainer)
     .map((m) => normalizeAdoUser(m.identity))
     .filter((u): u is AdoUser => u != null);
@@ -198,20 +215,37 @@ export async function getTeamMembers(conn: AdoConnection, team: string): Promise
 /**
  * Assignable people for the active workspace. When the connection pins a team we
  * return that team's members; otherwise we union the members of every team in the
- * project. Deduped by identity and sorted by display name.
+ * project. Members are fetched with bounded concurrency, deduped by identity, and
+ * sorted by display name. Throws only when *every* team lookup fails, so a partial
+ * outage degrades gracefully while a total one surfaces instead of looking empty.
  */
 export async function getProjectMembers(conn: AdoConnection): Promise<AdoUser[]> {
   const teams = conn.team ? [conn.team] : (await getTeams(conn)).map((t) => t.id);
-  const lists = await Promise.all(
-    teams.map((team) => getTeamMembers(conn, team).catch(() => [] as AdoUser[])),
-  );
+  if (teams.length === 0) return [];
 
   const byKey = new Map<string, AdoUser>();
-  for (const list of lists) {
-    for (const user of list) {
-      const key = (user.id ?? user.uniqueName ?? user.displayName ?? "").toLowerCase();
-      if (key && !byKey.has(key)) byKey.set(key, user);
+  let failures = 0;
+  const CONCURRENCY = 8;
+
+  for (let i = 0; i < teams.length; i += CONCURRENCY) {
+    const batch = teams.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((team) => getTeamMembers(conn, team).then((members) => members, () => null)),
+    );
+    for (const members of results) {
+      if (members === null) {
+        failures++;
+        continue;
+      }
+      for (const user of members) {
+        const key = (user.id ?? user.uniqueName ?? user.displayName ?? "").toLowerCase();
+        if (key && !byKey.has(key)) byKey.set(key, user);
+      }
     }
+  }
+
+  if (failures === teams.length) {
+    throw new Error("Couldn't load project members from Azure DevOps.");
   }
 
   return [...byKey.values()].sort((a, b) =>
