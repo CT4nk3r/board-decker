@@ -92,3 +92,20 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Tauri's bundlers hardcode their output filenames, so rename the published
+  # assets to carry an OS tag (Deck_<os>_...) — this groups them by platform in
+  # the Releases tab. The script is idempotent and safe to re-run.
+  tag-assets:
+    name: Tag asset filenames with OS
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add OS tags to release asset filenames
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: bash .github/scripts/tag-release-assets.sh
