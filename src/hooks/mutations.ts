@@ -2,34 +2,25 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import * as ado from "@/lib/ado";
-import { AdoError, type AdoPatchOp, type ScopeSpec, type WorkItem } from "@/lib/ado";
+import { type AdoPatchOp, type WorkItem } from "@/lib/ado";
 import { toast } from "@/components/ui/toast";
 import { keys } from "./keys";
+import { applyState, isConflict, matchesScope, revertState } from "./writePath";
 
-/** ADO returns these when a JSON-Patch `test` op on `/rev` fails (lost update). */
-function isConflict(err: unknown): boolean {
-  return err instanceof AdoError && (err.status === 409 || err.status === 412);
-}
-
-const DONE_STATES = ["Done", "Closed", "Removed", "Resolved", "Completed"];
-
-/** Does a freshly created item actually belong on the currently visible board? */
-function matchesScope(item: WorkItem, scope: ScopeSpec): boolean {
-  switch (scope.id) {
-    case "all":
-    case "recent":
-      return true;
-    case "active":
-      return !DONE_STATES.includes(item.state);
-    case "sprint":
-      return !!scope.arg && (item.iterationPath ?? "").includes(scope.arg);
-    case "area":
-      return !!scope.arg && (item.areaPath ?? "").includes(scope.arg);
-    // "assigned-to-me" / "created-by-me" hinge on the @Me identity, which the
-    // client can't resolve, so refetch rather than risk showing a phantom card.
-    default:
-      return false;
+/** Latest known rev from cache (detail wins, else board), so queued saves don't self-conflict. */
+function latestRev(
+  qc: ReturnType<typeof useQueryClient>,
+  conn: ado.AdoConnection,
+  id: number,
+  fallback?: number,
+): number | undefined {
+  const detail = qc.getQueryData<WorkItem>(keys.workItem(conn, id));
+  if (detail?.rev != null) return detail.rev;
+  for (const [, items] of qc.getQueriesData<WorkItem[]>({ queryKey: keys.boardAll(conn) })) {
+    const found = items?.find((w) => w.id === id);
+    if (found?.rev != null) return found.rev;
   }
+  return fallback;
 }
 
 /**
@@ -48,21 +39,15 @@ export function useChangeState() {
   return useMutation({
     scope: { id: "work-item-write" },
     mutationFn: ({ id, state, rev }: { id: number; state: string; rev?: number }) =>
-      ado.updateWorkItem(conn, id, ado.stateChangeOps(state), rev),
+      ado.updateWorkItem(conn, id, ado.stateChangeOps(state), latestRev(qc, conn, id, rev)),
     onMutate: async ({ id, state }) => {
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData<WorkItem[]>(key)?.find((w) => w.id === id);
-      qc.setQueryData<WorkItem[]>(key, (old) =>
-        old?.map((w) => (w.id === id ? { ...w, state } : w)),
-      );
+      qc.setQueryData<WorkItem[]>(key, (old) => applyState(old, id, state));
       return { previous, target: state };
     },
     onError: (err, { id }, ctx) => {
-      if (ctx?.previous) {
-        qc.setQueryData<WorkItem[]>(key, (old) =>
-          old?.map((w) => (w.id === id && w.state === ctx.target ? ctx.previous! : w)),
-        );
-      }
+      qc.setQueryData<WorkItem[]>(key, (old) => revertState(old, id, ctx!.target, ctx?.previous));
       if (isConflict(err)) {
         toast.error("Work item changed elsewhere", "Reloaded the latest — try the move again.");
       } else {
@@ -90,7 +75,7 @@ export function useUpdateWorkItem() {
   return useMutation({
     scope: { id: "work-item-write" },
     mutationFn: ({ id, ops, rev }: { id: number; ops: AdoPatchOp[]; rev?: number }) =>
-      ado.updateWorkItem(conn, id, ops, rev),
+      ado.updateWorkItem(conn, id, ops, latestRev(qc, conn, id, rev)),
     onSuccess: (updated) => {
       qc.setQueryData(keys.workItem(conn, updated.id), updated);
       qc.setQueriesData<WorkItem[]>({ queryKey: keys.boardAll(conn) }, (old) =>
@@ -122,7 +107,7 @@ export function useCreateWorkItem() {
     onSuccess: (created) => {
       // Only seed the board cache when the item matches the active scope;
       // otherwise refetch so a created-but-out-of-view item isn't a phantom card.
-      if (matchesScope(created, scope)) {
+      if (matchesScope(created, scope, conn.project)) {
         qc.setQueryData<WorkItem[]>(key, (old) => (old ? [created, ...old] : [created]));
         toast.success("Work item created", `#${created.id} · ${created.title}`);
       } else {
