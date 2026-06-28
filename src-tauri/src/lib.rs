@@ -1,4 +1,4 @@
-//! Deck — Tauri backend.
+//! Board Decker — Tauri backend.
 //!
 //! Azure DevOps REST does not send permissive CORS headers, so the webview
 //! cannot call it directly. All ADO traffic is routed through these Rust
@@ -10,7 +10,7 @@ use base64::Engine as _;
 use serde::Serialize;
 
 /// Keychain service + account under which the single active PAT is stored.
-const KEYRING_SERVICE: &str = "com.deck.adoboard";
+const KEYRING_SERVICE: &str = "com.boarddecker.app";
 const KEYRING_USER: &str = "ado-pat";
 
 fn pat_entry() -> Result<keyring::Entry, String> {
@@ -66,7 +66,7 @@ async fn perform(
     pat: String,
 ) -> Result<AdoResponse, String> {
     let client = reqwest::Client::builder()
-        .user_agent("Deck/0.1 (+https://github.com/CT4nk3r/ado-boarder)")
+        .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -166,7 +166,7 @@ async fn ado_fetch_image(url: String) -> Result<ImageResponse, String> {
         .map_err(|_| "No PAT stored. Please reconnect to Azure DevOps.".to_string())?;
 
     let client = reqwest::Client::builder()
-        .user_agent("Deck/0.1 (+https://github.com/CT4nk3r/ado-boarder)")
+        .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
         .build()
         .map_err(|e| e.to_string())?;
 

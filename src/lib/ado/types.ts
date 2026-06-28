@@ -1,4 +1,4 @@
-/** ADO domain types for Deck. Ported/adapted from the ado-plane-sync project. */
+/** ADO domain types for Board Decker. Ported/adapted from the ado-plane-sync project. */
 
 /** A user reference as it appears in ADO identity fields. */
 export interface AdoUser {

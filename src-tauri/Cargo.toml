@@ -1,7 +1,7 @@
 [package]
-name = "deck"
+name = "board-decker"
 version = "0.1.1"
-description = "Deck — a native desktop board over Azure DevOps work items"
+description = "Board Decker — a native desktop board over Azure DevOps work items"
 authors = ["you"]
 edition = "2021"
 
@@ -10,7 +10,7 @@ edition = "2021"
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
-name = "deck_lib"
+name = "board_decker_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

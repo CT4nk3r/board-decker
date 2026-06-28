@@ -91,14 +91,14 @@ jobs:
           #   Windows: configure a signing command in tauri.conf.json
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Deck ${{ github.ref_name }}"
+          releaseName: "Board Decker ${{ github.ref_name }}"
           releaseBody: "Download the installer for your platform from the assets below."
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
   # Tauri's bundlers hardcode their output filenames, so rename the published
-  # assets to carry an OS tag (Deck_<os>_...) — this groups them by platform in
+  # assets to carry an OS tag (BoardDecker_<os>_...) — this groups them by platform in
   # the Releases tab. It also rewrites the updater's latest.json URLs to match,
   # so auto-update keeps working. The script is idempotent and safe to re-run.
   tag-assets:
