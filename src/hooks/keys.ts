@@ -10,4 +10,5 @@ export const keys = {
   workItem: (c: AdoConnection, id: number) => ["work-item", c.org, c.project, id] as const,
   comments: (c: AdoConnection, id: number) => ["comments", c.org, c.project, id] as const,
   iterations: (c: AdoConnection) => ["iterations", c.org, c.project, c.team ?? ""] as const,
+  avatar: (url: string) => ["avatar", url] as const,
 };
