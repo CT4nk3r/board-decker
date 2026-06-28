@@ -130,6 +130,12 @@ export async function updateWorkItem(
   return mapWorkItem(wi);
 }
 
+/** Delete a work item by id (moves it to the project's recycle bin). */
+export async function deleteWorkItem(conn: AdoConnection, id: number): Promise<void> {
+  const url = withVersion(`${projBase(conn)}/_apis/wit/workitems/${id}`);
+  await adoRequest({ method: "DELETE", url });
+}
+
 /** Work item types defined by the project's process. */
 export async function getWorkItemTypes(conn: AdoConnection): Promise<AdoWorkItemType[]> {
   const url = withVersion(`${projBase(conn)}/_apis/wit/workitemtypes`);

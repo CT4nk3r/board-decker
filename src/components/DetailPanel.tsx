@@ -8,10 +8,11 @@ import {
   Link2,
   CornerLeftUp,
   Send,
+  Trash2,
 } from "lucide-react";
 import { useBoardStore } from "@/store/board";
 import { useComments, useColumns, useIterations, useWorkItemDetail } from "@/hooks/queries";
-import { useAddComment, useUpdateWorkItem } from "@/hooks/mutations";
+import { useAddComment, useDeleteWorkItem, useUpdateWorkItem } from "@/hooks/mutations";
 import {
   FIELD,
   setField,
@@ -25,6 +26,7 @@ import { openExternal } from "@/lib/open";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,6 +82,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
   const { data: comments } = useComments(id);
   const update = useUpdateWorkItem();
   const addComment = useAddComment(id);
+  const del = useDeleteWorkItem();
 
   const [titleDraft, setTitleDraft] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
@@ -87,6 +90,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
   const [tagsDraft, setTagsDraft] = useState("");
   const [editingTags, setEditingTags] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -98,6 +102,16 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
 
   function save(ops: AdoPatchOp[]) {
     if (ops.length) update.mutate({ id, ops });
+  }
+
+  async function handleDelete() {
+    try {
+      await del.mutateAsync(id);
+      setConfirmDelete(false);
+      onClose();
+    } catch {
+      /* error toast handled by the mutation */
+    }
   }
 
   if (isLoading) {
@@ -135,6 +149,15 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
               <ExternalLink size={15} />
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Delete work item"
+            className="text-faint hover:bg-danger/10 hover:text-danger"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={15} />
+          </Button>
           <Button variant="ghost" size="icon" title="Close" onClick={onClose}>
             <X size={16} />
           </Button>
@@ -356,6 +379,23 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
 
         <FooterMeta item={item} />
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${item.type} #${item.id}?`}
+        description={
+          <>
+            <span className="font-medium text-fg">{item.title}</span> will be moved to the Azure
+            DevOps recycle bin. You can restore it from there if needed.
+          </>
+        }
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        variant="danger"
+        pending={del.isPending}
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

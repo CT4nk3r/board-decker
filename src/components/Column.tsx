@@ -8,9 +8,10 @@ interface ColumnProps {
   items: WorkItem[];
   typeColors: Map<string, string | undefined>;
   onOpen: (id: number) => void;
+  onDelete: (item: WorkItem) => void;
 }
 
-export function Column({ column, items, typeColors, onOpen }: ColumnProps) {
+export function Column({ column, items, typeColors, onOpen, onDelete }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.name });
   const dot = adoColor(column.color, "#6b6e78");
 
@@ -35,6 +36,7 @@ export function Column({ column, items, typeColors, onOpen }: ColumnProps) {
             item={item}
             typeColor={typeColors.get(item.type)}
             onOpen={onOpen}
+            onDelete={onDelete}
           />
         ))}
         {items.length === 0 && (

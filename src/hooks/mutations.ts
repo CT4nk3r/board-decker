@@ -78,6 +78,24 @@ export function useCreateWorkItem() {
   });
 }
 
+/** Delete a work item (moves it to the ADO recycle bin) and drop it from caches. */
+export function useDeleteWorkItem() {
+  const qc = useQueryClient();
+  const conn = useConnectionStore((s) => s.connection)!;
+
+  return useMutation({
+    mutationFn: (id: number) => ado.deleteWorkItem(conn, id),
+    onSuccess: (_data, id) => {
+      qc.setQueriesData<WorkItem[]>({ queryKey: keys.boardAll(conn) }, (old) =>
+        old?.filter((w) => w.id !== id),
+      );
+      qc.removeQueries({ queryKey: keys.workItem(conn, id) });
+      toast.success("Work item deleted", `#${id} moved to the recycle bin`);
+    },
+    onError: (err) => toast.error("Couldn't delete work item", (err as Error).message),
+  });
+}
+
 /** Add a comment to a work item. */
 export function useAddComment(id: number) {
   const qc = useQueryClient();

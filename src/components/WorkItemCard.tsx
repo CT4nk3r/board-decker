@@ -1,9 +1,17 @@
 import { useDraggable } from "@dnd-kit/core";
-import { GitBranch } from "lucide-react";
+import { GitBranch, PanelRight, ExternalLink, Trash2 } from "lucide-react";
 import type { WorkItem } from "@/lib/ado";
 import { cn, adoColor } from "@/lib/utils";
+import { openExternal } from "@/lib/open";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 const PRIORITY_LABEL: Record<number, { label: string; color: string }> = {
   1: { label: "P1", color: "#f0506e" },
@@ -81,20 +89,39 @@ interface CardProps {
   item: WorkItem;
   typeColor?: string;
   onOpen: (id: number) => void;
+  onDelete: (item: WorkItem) => void;
 }
 
-/** Draggable board card. */
-export function WorkItemCard({ item, typeColor, onOpen }: CardProps) {
+/** Draggable board card with a right-click context menu. */
+export function WorkItemCard({ item, typeColor, onOpen, onDelete }: CardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.id });
 
   return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn("touch-none outline-none", isDragging && "opacity-40")}
-    >
-      <WorkItemCardBody item={item} typeColor={typeColor} onClick={() => onOpen(item.id)} />
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={setNodeRef}
+          {...listeners}
+          {...attributes}
+          className={cn("touch-none outline-none", isDragging && "opacity-40")}
+        >
+          <WorkItemCardBody item={item} typeColor={typeColor} onClick={() => onOpen(item.id)} />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onOpen(item.id)}>
+          <PanelRight /> Open details
+        </ContextMenuItem>
+        {item.url && (
+          <ContextMenuItem onSelect={() => openExternal(item.url!)}>
+            <ExternalLink /> Open in Azure DevOps
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="danger" onSelect={() => onDelete(item)}>
+          <Trash2 /> Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
