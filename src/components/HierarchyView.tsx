@@ -385,7 +385,7 @@ function TreeRow({ row, toggle, typeColors, stateColors, onOpen }: TreeRowProps)
             e.stopPropagation();
             toggle(item.id);
           }}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:bg-elevated hover:text-fg disabled:hover:bg-transparent"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:bg-elevated hover:text-fg"
         >
           <ChevronRight size={14} className={cn("transition-transform", isOpen && "rotate-90")} />
         </button>
