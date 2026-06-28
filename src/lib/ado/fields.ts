@@ -1,5 +1,7 @@
 /** ADO field reference names + JSON-Patch helpers for create/update. */
 
+import type { AdoUser } from "./types";
+
 export const FIELD = {
   Title: "System.Title",
   State: "System.State",
@@ -36,6 +38,16 @@ export function setField(refName: string, value: unknown): AdoPatchOp {
 /** Convenience: patch op to change `System.State`. */
 export function stateChangeOps(newState: string): AdoPatchOp[] {
   return [setField(FIELD.State, newState)];
+}
+
+/**
+ * Patch op(s) to (re)assign a work item, or clear the assignee when `user` is
+ * null. ADO resolves the identity from the unique name (UPN/email); an empty
+ * string clears `System.AssignedTo`.
+ */
+export function assignOps(user: AdoUser | null): AdoPatchOp[] {
+  const value = user ? (user.uniqueName ?? user.mail ?? user.displayName ?? "") : "";
+  return [setField(FIELD.AssignedTo, value)];
 }
 
 /** Fields requested for board cards (keep this lean for fast batch loads). */

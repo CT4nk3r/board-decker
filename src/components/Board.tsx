@@ -11,12 +11,13 @@ import {
 } from "@dnd-kit/core";
 import { AlertTriangle, CalendarRange, Inbox } from "lucide-react";
 import { useBoardItems, useColumns } from "@/hooks/queries";
-import { useChangeState } from "@/hooks/mutations";
+import { useChangeState, useDeleteWorkItem } from "@/hooks/mutations";
 import { useBoardStore } from "@/store/board";
 import type { AdoState, WorkItem } from "@/lib/ado";
 import { Column } from "@/components/Column";
 import { WorkItemCardBody } from "@/components/WorkItemCard";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 
 function matchesSearch(item: WorkItem, q: string): boolean {
@@ -38,10 +39,13 @@ export function Board() {
   const scope = useBoardStore((s) => s.scope);
   const search = useBoardStore((s) => s.search);
   const select = useBoardStore((s) => s.select);
+  const selectedId = useBoardStore((s) => s.selectedId);
   const { data: items, isLoading, isError, error, refetch, isFetching } = useBoardItems();
   const { data: columnsData } = useColumns();
   const changeState = useChangeState();
+  const del = useDeleteWorkItem();
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<WorkItem | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -94,6 +98,18 @@ export function Board() {
     const item = items?.find((i) => i.id === id);
     if (!item || item.state.toLowerCase() === targetState.toLowerCase()) return;
     changeState.mutate({ id, state: targetState });
+  }
+
+  async function handleDelete() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    try {
+      await del.mutateAsync(id);
+      if (selectedId === id) select(null);
+      setPendingDelete(null);
+    } catch {
+      /* error toast handled by the mutation */
+    }
   }
 
   // --- non-board states ---
@@ -161,6 +177,7 @@ export function Board() {
               items={grouped.get(col.name.toLowerCase()) ?? []}
               typeColors={typeColors}
               onOpen={select}
+              onDelete={setPendingDelete}
             />
           ))}
           <div className="w-2 shrink-0" />
@@ -182,6 +199,27 @@ export function Board() {
           </span>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
+        }}
+        title={pendingDelete ? `Delete ${pendingDelete.type} #${pendingDelete.id}?` : ""}
+        description={
+          pendingDelete ? (
+            <>
+              <span className="font-medium text-fg">{pendingDelete.title}</span> will be moved to the
+              Azure DevOps recycle bin. You can restore it from there if needed.
+            </>
+          ) : undefined
+        }
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        variant="danger"
+        pending={del.isPending}
+        onConfirm={handleDelete}
+      />
     </DndContext>
   );
 }

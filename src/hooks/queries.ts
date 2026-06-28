@@ -103,6 +103,21 @@ export function useIterations() {
 }
 
 /**
+ * Assignable people for the active workspace (union of the project's team
+ * members). Cached for a few minutes and, by default, only fetched lazily —
+ * pass `enabled` (e.g. a picker's open state) to defer the request until needed.
+ */
+export function useProjectMembers(enabled = true) {
+  const conn = useConnectionStore((s) => s.connection);
+  return useQuery({
+    queryKey: conn ? keys.members(conn) : ["members", "none"],
+    enabled: !!conn && enabled,
+    staleTime: 5 * 60_000,
+    queryFn: () => ado.getProjectMembers(conn!),
+  });
+}
+
+/**
  * An ADO avatar image resolved to a base64 `data:` URL (fetched through Rust so
  * the PAT is attached). Keyed by URL and cached indefinitely, so the same person
  * across many cards triggers a single request. Returns `null` until resolved.

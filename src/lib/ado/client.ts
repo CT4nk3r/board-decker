@@ -5,13 +5,14 @@
  */
 
 import { adoRequest } from "./invoke";
-import { mapWorkItem } from "./mapper";
+import { mapWorkItem, normalizeAdoUser } from "./mapper";
 import { CARD_FIELDS, JSON_PATCH_CONTENT_TYPE, type AdoPatchOp } from "./fields";
 import type {
   AdoComment,
   AdoConnection,
   AdoIteration,
   AdoState,
+  AdoUser,
   AdoWorkItem,
   AdoWorkItemType,
   WorkItem,
@@ -130,6 +131,12 @@ export async function updateWorkItem(
   return mapWorkItem(wi);
 }
 
+/** Delete a work item by id (moves it to the project's recycle bin). */
+export async function deleteWorkItem(conn: AdoConnection, id: number): Promise<void> {
+  const url = withVersion(`${projBase(conn)}/_apis/wit/workitems/${id}`);
+  await adoRequest({ method: "DELETE", url });
+}
+
 /** Work item types defined by the project's process. */
 export async function getWorkItemTypes(conn: AdoConnection): Promise<AdoWorkItemType[]> {
   const url = withVersion(`${projBase(conn)}/_apis/wit/workitemtypes`);
@@ -159,6 +166,91 @@ export async function getIterations(conn: AdoConnection): Promise<AdoIteration[]
   const url = withVersion(`${orgBase(conn)}/${enc(conn.project)}${teamSeg}/_apis/work/teamsettings/iterations`);
   const res = await adoRequest<{ value?: AdoIteration[] }>({ method: "GET", url });
   return res.value ?? [];
+}
+
+/** A raw team member entry as returned by the teams/members endpoint. */
+interface RawTeamMember {
+  identity?: { isContainer?: boolean } & Record<string, unknown>;
+}
+
+/** ADO's default page size for list endpoints; also the safe max for `$top`. */
+const PAGE_SIZE = 100;
+
+/**
+ * Fetch every page of an ADO list endpoint. These endpoints cap results at 100
+ * and require explicit `$top`/`$skip` paging, so we loop until a short page
+ * signals the end. `baseUrl` must not yet carry an api-version.
+ */
+async function pagedAdoList<T>(baseUrl: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let skip = 0; ; skip += PAGE_SIZE) {
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    const url = withVersion(`${baseUrl}${sep}$top=${PAGE_SIZE}&$skip=${skip}`);
+    const res = await adoRequest<{ value?: T[] }>({ method: "GET", url });
+    const page = res.value ?? [];
+    out.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
+/** Teams defined in the project (used to gather the set of assignable people). */
+export async function getTeams(conn: AdoConnection): Promise<{ id: string; name: string }[]> {
+  return pagedAdoList<{ id: string; name: string }>(
+    `${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams`,
+  );
+}
+
+/** Members of a single team, normalized to {@link AdoUser} (groups excluded). */
+export async function getTeamMembers(conn: AdoConnection, team: string): Promise<AdoUser[]> {
+  const members = await pagedAdoList<RawTeamMember>(
+    `${orgBase(conn)}/_apis/projects/${enc(conn.project)}/teams/${enc(team)}/members`,
+  );
+  return members
+    .filter((m) => m.identity && !m.identity.isContainer)
+    .map((m) => normalizeAdoUser(m.identity))
+    .filter((u): u is AdoUser => u != null);
+}
+
+/**
+ * Assignable people for the active workspace. When the connection pins a team we
+ * return that team's members; otherwise we union the members of every team in the
+ * project. Members are fetched with bounded concurrency, deduped by identity, and
+ * sorted by display name. Throws only when *every* team lookup fails, so a partial
+ * outage degrades gracefully while a total one surfaces instead of looking empty.
+ */
+export async function getProjectMembers(conn: AdoConnection): Promise<AdoUser[]> {
+  const teams = conn.team ? [conn.team] : (await getTeams(conn)).map((t) => t.id);
+  if (teams.length === 0) return [];
+
+  const byKey = new Map<string, AdoUser>();
+  let failures = 0;
+  const CONCURRENCY = 8;
+
+  for (let i = 0; i < teams.length; i += CONCURRENCY) {
+    const batch = teams.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((team) => getTeamMembers(conn, team).then((members) => members, () => null)),
+    );
+    for (const members of results) {
+      if (members === null) {
+        failures++;
+        continue;
+      }
+      for (const user of members) {
+        const key = (user.id ?? user.uniqueName ?? user.displayName ?? "").toLowerCase();
+        if (key && !byKey.has(key)) byKey.set(key, user);
+      }
+    }
+  }
+
+  if (failures === teams.length) {
+    throw new Error("Couldn't load project members from Azure DevOps.");
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    (a.displayName ?? a.uniqueName ?? "").localeCompare(b.displayName ?? b.uniqueName ?? ""),
+  );
 }
 
 /** Comments on a work item (newest API preview surface). */
