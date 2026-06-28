@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Updater Harness</title>
+    <!-- Mark the page as "inside Tauri" BEFORE any module loads, since
+         UpdateButton evaluates its `inTauri` guard at module-load time. -->
+    <script>
+      window.__TAURI_INTERNALS__ = {};
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>
