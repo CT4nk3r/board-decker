@@ -14,11 +14,13 @@ import { useBoardItems, useColumns } from "@/hooks/queries";
 import { useChangeState, useDeleteWorkItem } from "@/hooks/mutations";
 import { useBoardStore } from "@/store/board";
 import type { AdoState, WorkItem } from "@/lib/ado";
+import { MAX_BOARD_ITEMS } from "@/lib/ado";
 import { Column } from "@/components/Column";
 import { WorkItemCardBody } from "@/components/WorkItemCard";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/components/ui/toast";
 
 function matchesSearch(item: WorkItem, q: string): boolean {
   if (!q) return true;
@@ -85,6 +87,14 @@ export function Board() {
 
   const activeItem = items?.find((i) => i.id === activeId) ?? null;
 
+  // States the dragged card's type supports (null = unknown/failed → don't block).
+  const allowedTargets = useMemo<Set<string> | null>(() => {
+    if (!activeItem) return null;
+    const list = columnsData?.statesByType?.[activeItem.type];
+    if (!list || list.length === 0) return null;
+    return new Set(list.map((s) => s.toLowerCase()));
+  }, [activeItem, columnsData]);
+
   function onDragStart(e: DragStartEvent) {
     setActiveId(Number(e.active.id));
   }
@@ -97,6 +107,10 @@ export function Board() {
     const targetState = String(over.id);
     const item = items?.find((i) => i.id === id);
     if (!item || item.state.toLowerCase() === targetState.toLowerCase()) return;
+    if (allowedTargets && !allowedTargets.has(targetState.toLowerCase())) {
+      toast.error("Invalid move", `A ${item.type} can't be set to "${targetState}".`);
+      return;
+    }
     changeState.mutate({ id, state: targetState });
   }
 
@@ -160,6 +174,9 @@ export function Board() {
     );
   }
 
+  const truncated = (items?.length ?? 0) >= MAX_BOARD_ITEMS;
+  const failedTypes = columnsData?.failedTypes ?? [];
+
   return (
     <DndContext
       sensors={sensors}
@@ -168,19 +185,25 @@ export function Board() {
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="min-h-0 flex-1">
-        <div className="flex h-full gap-4 overflow-x-auto px-4 py-4">
-          {columns.map((col) => (
-            <Column
-              key={col.name}
-              column={col}
-              items={grouped.get(col.name.toLowerCase()) ?? []}
-              typeColors={typeColors}
-              onOpen={select}
-              onDelete={setPendingDelete}
-            />
-          ))}
-          <div className="w-2 shrink-0" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {(truncated || failedTypes.length > 0) && (
+          <BoardBanner truncated={truncated} failedTypes={failedTypes} />
+        )}
+        <div className="min-h-0 flex-1">
+          <div className="flex h-full gap-4 overflow-x-auto px-4 py-4">
+            {columns.map((col) => (
+              <Column
+                key={col.name}
+                column={col}
+                items={grouped.get(col.name.toLowerCase()) ?? []}
+                typeColors={typeColors}
+                disabled={!!allowedTargets && !allowedTargets.has(col.name.toLowerCase())}
+                onOpen={select}
+                onDelete={setPendingDelete}
+              />
+            ))}
+            <div className="w-2 shrink-0" />
+          </div>
         </div>
       </div>
 
@@ -221,6 +244,19 @@ export function Board() {
         onConfirm={handleDelete}
       />
     </DndContext>
+  );
+}
+
+function BoardBanner({ truncated, failedTypes }: { truncated: boolean; failedTypes: string[] }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs text-amber-200/90">
+      <AlertTriangle size={13} className="shrink-0" />
+      <span className="truncate">
+        {truncated && `Showing the first ${MAX_BOARD_ITEMS} items — narrow the scope to see all. `}
+        {failedTypes.length > 0 &&
+          `Some columns may be missing: couldn't load states for ${failedTypes.join(", ")}.`}
+      </span>
+    </div>
   );
 }
 

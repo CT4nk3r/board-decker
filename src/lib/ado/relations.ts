@@ -44,9 +44,18 @@ export function parseLinkedItems(relations: AdoRelation[] | undefined): LinkedIt
   return result;
 }
 
+/** Percent-decode a URL, falling back to the raw value on malformed encoding. */
+function safeDecode(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
+}
+
 /** Decode a `vstfs:///Git/...` artifact URI into a friendly dev link. */
 function parseArtifact(url: string, attrName?: string): DevLink | undefined {
-  const decoded = decodeURIComponent(url);
+  const decoded = safeDecode(url);
   if (/\/Git\/PullRequestId\//i.test(decoded)) {
     const id = decoded.split("/").pop();
     return { kind: "pullRequest", label: id ? `Pull Request !${id}` : "Pull Request" };

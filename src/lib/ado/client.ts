@@ -22,6 +22,13 @@ const API = "7.0";
 const COMMENTS_API = "7.0-preview.4";
 const ADO_HOST = "https://dev.azure.com";
 
+/**
+ * Upper bound on work items loaded for a board scope. Broad scopes (`all`, etc.)
+ * can match thousands of items; capping the WIQL result keeps the batch fetch and
+ * render bounded. The board flags when a scope is truncated so users can narrow it.
+ */
+export const MAX_BOARD_ITEMS = 500;
+
 const enc = encodeURIComponent;
 
 function orgBase(conn: AdoConnection): string {
@@ -52,8 +59,12 @@ export async function validateConnection(
 }
 
 /** Run a WIQL query, returning the matching work item ids (in query order). */
-export async function queryWorkItemIds(conn: AdoConnection, wiql: string): Promise<number[]> {
-  const url = withVersion(`${projBase(conn)}/_apis/wit/wiql`);
+export async function queryWorkItemIds(
+  conn: AdoConnection,
+  wiql: string,
+  top = MAX_BOARD_ITEMS,
+): Promise<number[]> {
+  const url = withVersion(`${projBase(conn)}/_apis/wit/wiql?$top=${top}`);
   const res = await adoRequest<{ workItems?: { id?: number }[] }>({
     method: "POST",
     url,

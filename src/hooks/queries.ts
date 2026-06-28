@@ -8,12 +8,20 @@ import { keys } from "./keys";
 interface ColumnsResult {
   types: AdoWorkItemType[];
   columns: AdoState[];
+  /** Allowed state names per work item type (preserves type-specific workflows). */
+  statesByType: Record<string, string[]>;
+  /** Work item types whose state list failed to load (columns may be incomplete). */
+  failedTypes: string[];
 }
 
 /**
  * Board columns = the union of states across the project's work item types,
  * de-duplicated and ordered by state category (Proposed -> InProgress ->
  * Resolved -> Completed -> Removed). Heavily cached; the process rarely changes.
+ *
+ * Per-type failures are surfaced (`failedTypes` + a warning) rather than
+ * swallowed; if *every* type's state lookup fails the query errors so the board
+ * shows a clear failure instead of silently empty columns.
  */
 export function useColumns() {
   const conn = useConnectionStore((s) => s.connection);
@@ -27,14 +35,28 @@ export function useColumns() {
         types.map((t) =>
           ado
             .getStatesForType(conn!, t.name)
-            .then((states) => states)
-            .catch(() => [] as AdoState[]),
+            .then((states) => ({ type: t.name, states }))
+            .catch(() => ({ type: t.name, states: null as AdoState[] | null })),
         ),
       );
 
+      const failedTypes = perType.filter((r) => r.states === null).map((r) => r.type);
+      if (types.length > 0 && failedTypes.length === types.length) {
+        throw new Error("Couldn't load board columns from Azure DevOps.");
+      }
+      if (failedTypes.length > 0) {
+        console.warn(
+          `Board columns: states failed to load for ${failedTypes.join(", ")}; ` +
+            "columns may be incomplete.",
+        );
+      }
+
+      const statesByType: Record<string, string[]> = {};
       const merged = new Map<string, AdoState & { order: number }>();
       let idx = 0;
-      for (const states of perType) {
+      for (const { type, states } of perType) {
+        if (!states) continue;
+        statesByType[type] = states.map((s) => s.name);
         for (const s of states) {
           const key = s.name.toLowerCase();
           if (!merged.has(key)) {
@@ -47,7 +69,7 @@ export function useColumns() {
       const columns = [...merged.values()]
         .sort((a, b) => a.order - b.order)
         .map(({ order: _order, ...rest }) => rest);
-      return { types, columns };
+      return { types, columns, statesByType, failedTypes };
     },
   });
 }

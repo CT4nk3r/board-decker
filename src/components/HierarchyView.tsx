@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
   CalendarRange,
@@ -10,6 +11,7 @@ import {
 import { useBoardItems, useColumns } from "@/hooks/queries";
 import { useBoardStore } from "@/store/board";
 import type { WorkItem } from "@/lib/ado";
+import { MAX_BOARD_ITEMS } from "@/lib/ado";
 import { matchesSearch } from "@/lib/match";
 import { cn, adoColor } from "@/lib/utils";
 import { Empty } from "@/components/Empty";
@@ -40,8 +42,6 @@ const PRIORITY_LABEL: Record<number, { label: string; color: string }> = {
   1: { label: "P1", color: "#f0506e" },
   2: { label: "P2", color: "#f4b740" },
 };
-
-const EMPTY_SET: ReadonlySet<number> = new Set();
 
 interface Tree {
   byId: Map<number, WorkItem>;
@@ -101,6 +101,53 @@ function buildTree(items: WorkItem[]): Tree {
   return { byId, childrenOf, roots };
 }
 
+/** A single visible tree node, depth-first, ready for windowed rendering. */
+interface FlatRow {
+  item: WorkItem;
+  depth: number;
+  pos: number;
+  setSize: number;
+  childCount: number;
+  hasChildren: boolean;
+  isOpen: boolean;
+}
+
+/**
+ * Flatten the visible portion of the forest depth-first so the tree can be
+ * virtualized. Honors search visibility, expansion state, and (while searching)
+ * force-expansion, and guards against parent cycles via the ancestor set.
+ */
+function flattenTree(
+  roots: WorkItem[],
+  childrenOf: Map<number, WorkItem[]>,
+  expanded: Set<number>,
+  visible: Set<number> | null,
+  searching: boolean,
+): FlatRow[] {
+  const rows: FlatRow[] = [];
+  const walk = (nodes: WorkItem[], depth: number, ancestors: Set<number>) => {
+    nodes.forEach((item, i) => {
+      if (ancestors.has(item.id)) return;
+      const all = childrenOf.get(item.id) ?? [];
+      const children = visible ? all.filter((c) => visible.has(c.id)) : all;
+      const hasChildren = children.length > 0;
+      const isOpen = hasChildren && (searching || expanded.has(item.id));
+      rows.push({
+        item,
+        depth,
+        pos: i + 1,
+        setSize: nodes.length,
+        childCount: children.length,
+        hasChildren,
+        isOpen,
+      });
+      if (isOpen) walk(children, depth + 1, new Set(ancestors).add(item.id));
+    });
+  };
+  walk(roots, 0, new Set());
+  return rows;
+}
+
 export function HierarchyView() {
   const scope = useBoardStore((s) => s.scope);
   const search = useBoardStore((s) => s.search);
@@ -158,6 +205,22 @@ export function HierarchyView() {
   const parentIds = useMemo(() => [...childrenOf.keys()], [childrenOf]);
   const expandAll = useCallback(() => setExpanded(new Set(parentIds)), [parentIds]);
   const collapseAll = useCallback(() => setExpanded(new Set()), []);
+
+  // Flatten the visible tree, then virtualize so deep/wide forests stay smooth.
+  const flatRows = useMemo(
+    () => flattenTree(visibleRoots, childrenOf, expanded, visible, !!q),
+    [visibleRoots, childrenOf, expanded, visible, q],
+  );
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 36,
+    overscan: 12,
+  });
+
+  const truncated = (items?.length ?? 0) >= MAX_BOARD_ITEMS;
+  const failedTypes = columnsData?.failedTypes ?? [];
 
   // --- non-tree states (mirror the board) ---
   if ((scope.id === "sprint" || scope.id === "area") && !scope.arg) {
@@ -243,25 +306,40 @@ export function HierarchyView() {
         </div>
       </div>
 
-      <div role="tree" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {visibleRoots.map((item, i) => (
-          <TreeRow
-            key={item.id}
-            item={item}
-            depth={0}
-            pos={i + 1}
-            setSize={visibleRoots.length}
-            ancestors={EMPTY_SET}
-            childrenOf={childrenOf}
-            expanded={expanded}
-            toggle={toggle}
-            searching={!!q}
-            visible={visible}
-            typeColors={typeColors}
-            stateColors={stateColors}
-            onOpen={select}
-          />
-        ))}
+      {(truncated || failedTypes.length > 0) && (
+        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs text-amber-200/90">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="truncate">
+            {truncated && `Showing the first ${MAX_BOARD_ITEMS} items — narrow the scope to see all. `}
+            {failedTypes.length > 0 &&
+              `Some states may be missing for ${failedTypes.join(", ")}.`}
+          </span>
+        </div>
+      )}
+
+      <div ref={scrollRef} role="tree" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
+          {rowVirtualizer.getVirtualItems().map((v) => {
+            const row = flatRows[v.index];
+            return (
+              <div
+                key={row.item.id}
+                data-index={v.index}
+                ref={rowVirtualizer.measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{ transform: `translateY(${v.start}px)` }}
+              >
+                <TreeRow
+                  row={row}
+                  toggle={toggle}
+                  typeColors={typeColors}
+                  stateColors={stateColors}
+                  onOpen={select}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {isFetching && (
@@ -276,132 +354,77 @@ export function HierarchyView() {
 }
 
 interface TreeRowProps {
-  item: WorkItem;
-  depth: number;
-  pos: number;
-  setSize: number;
-  ancestors: ReadonlySet<number>;
-  childrenOf: Map<number, WorkItem[]>;
-  expanded: Set<number>;
+  row: FlatRow;
   toggle: (id: number) => void;
-  searching: boolean;
-  visible: Set<number> | null;
   typeColors: Map<string, string | undefined>;
   stateColors: Map<string, string | undefined>;
   onOpen: (id: number) => void;
 }
 
-function TreeRow({
-  item,
-  depth,
-  pos,
-  setSize,
-  ancestors,
-  childrenOf,
-  expanded,
-  toggle,
-  searching,
-  visible,
-  typeColors,
-  stateColors,
-  onOpen,
-}: TreeRowProps) {
-  // Guard against pathological parent cycles in the data.
-  if (ancestors.has(item.id)) return null;
-
-  const all = childrenOf.get(item.id) ?? [];
-  const children = visible ? all.filter((c) => visible.has(c.id)) : all;
-  const hasChildren = children.length > 0;
-  // While searching the path is force-expanded; otherwise honor user state.
-  const isOpen = searching ? hasChildren : expanded.has(item.id);
-
+function TreeRow({ row, toggle, typeColors, stateColors, onOpen }: TreeRowProps) {
+  const { item, depth, pos, setSize, childCount, hasChildren, isOpen } = row;
   const priority = item.priority ? PRIORITY_LABEL[item.priority] : undefined;
   const stateColor = adoColor(stateColors.get(item.state.toLowerCase()), "#6b6e78");
-  const childAncestors = hasChildren ? new Set(ancestors).add(item.id) : null;
 
   return (
-    <>
-      <div
-        role="treeitem"
-        aria-level={depth + 1}
-        aria-setsize={setSize}
-        aria-posinset={pos}
-        aria-expanded={hasChildren ? isOpen : undefined}
-        onClick={() => onOpen(item.id)}
-        className="group flex cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 transition-colors hover:bg-surface-2"
-        style={{ paddingLeft: depth * 20 + 6 }}
-      >
-        {hasChildren ? (
-          <button
-            type="button"
-            aria-label={isOpen ? "Collapse" : "Expand"}
-            disabled={searching}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggle(item.id);
-            }}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:bg-elevated hover:text-fg disabled:hover:bg-transparent"
-          >
-            <ChevronRight size={14} className={cn("transition-transform", isOpen && "rotate-90")} />
-          </button>
-        ) : (
-          <span className="h-5 w-5 shrink-0" />
-        )}
+    <div
+      role="treeitem"
+      aria-level={depth + 1}
+      aria-setsize={setSize}
+      aria-posinset={pos}
+      aria-expanded={hasChildren ? isOpen : undefined}
+      onClick={() => onOpen(item.id)}
+      className="group flex cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 transition-colors hover:bg-surface-2"
+      style={{ paddingLeft: depth * 20 + 6 }}
+    >
+      {hasChildren ? (
+        <button
+          type="button"
+          aria-label={isOpen ? "Collapse" : "Expand"}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(item.id);
+          }}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:bg-elevated hover:text-fg disabled:hover:bg-transparent"
+        >
+          <ChevronRight size={14} className={cn("transition-transform", isOpen && "rotate-90")} />
+        </button>
+      ) : (
+        <span className="h-5 w-5 shrink-0" />
+      )}
 
-        <span
-          className="h-2 w-2 shrink-0 rounded-[3px]"
-          style={{ backgroundColor: adoColor(typeColors.get(item.type), "#5b6cff") }}
-          title={item.type}
-        />
+      <span
+        className="h-2 w-2 shrink-0 rounded-[3px]"
+        style={{ backgroundColor: adoColor(typeColors.get(item.type), "#5b6cff") }}
+        title={item.type}
+      />
 
-        <span className="shrink-0 text-[11px] font-medium text-faint">
-          {item.type} · #{item.id}
+      <span className="shrink-0 text-[11px] font-medium text-faint">
+        {item.type} · #{item.id}
+      </span>
+
+      <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{item.title}</span>
+
+      {hasChildren && !isOpen && (
+        <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[10px] leading-5 text-faint">
+          {childCount}
         </span>
+      )}
 
-        <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{item.title}</span>
+      {priority && (
+        <span
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+          style={{ backgroundColor: `${priority.color}22`, color: priority.color }}
+        >
+          {priority.label}
+        </span>
+      )}
 
-        {hasChildren && !isOpen && (
-          <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[10px] leading-5 text-faint">
-            {children.length}
-          </span>
-        )}
+      <Badge color={stateColor} className="shrink-0">
+        {item.state}
+      </Badge>
 
-        {priority && (
-          <span
-            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
-            style={{ backgroundColor: `${priority.color}22`, color: priority.color }}
-          >
-            {priority.label}
-          </span>
-        )}
-
-        <Badge color={stateColor} className="shrink-0">
-          {item.state}
-        </Badge>
-
-        <Avatar user={item.assignee} size={20} className="shrink-0" />
-      </div>
-
-      {isOpen &&
-        childAncestors &&
-        children.map((child, i) => (
-          <TreeRow
-            key={child.id}
-            item={child}
-            depth={depth + 1}
-            pos={i + 1}
-            setSize={children.length}
-            ancestors={childAncestors}
-            childrenOf={childrenOf}
-            expanded={expanded}
-            toggle={toggle}
-            searching={searching}
-            visible={visible}
-            typeColors={typeColors}
-            stateColors={stateColors}
-            onOpen={onOpen}
-          />
-        ))}
-    </>
+      <Avatar user={item.assignee} size={20} className="shrink-0" />
+    </div>
   );
 }
