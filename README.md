@@ -65,4 +65,24 @@ npm run tauri build    # produce a distributable bundle
 npm run build          # type-check + build the frontend only
 ```
 
-Cross-platform: Tauri builds macOS and Windows from this one codebase.
+Cross-platform: Tauri builds macOS, Windows, and Linux from this one codebase.
+
+## CI & Releases
+
+GitHub Actions builds the Tauri app on every push/PR and publishes installers on tags
+(`.github/workflows/`):
+
+- **`ci.yml`** — on push/PR to `master`: type-checks and builds the frontend, then
+  builds the native app on **macOS (Apple Silicon + Intel universal)**, **Windows**, and
+  **Linux**. The resulting bundles are uploaded as workflow artifacts (7-day retention).
+- **`release.yml`** — on a `v*` tag: builds all three platforms with
+  [`tauri-action`](https://github.com/tauri-apps/tauri-action) and uploads the installers
+  to a **draft GitHub Release**. Cut one by tagging:
+
+  ```bash
+  # keep "version" in src-tauri/tauri.conf.json in sync with the tag, then:
+  git tag v0.1.0 && git push origin v0.1.0
+  ```
+
+  Review the drafted release, then publish it. Builds are unsigned by default; add
+  Apple/Windows signing secrets (see the commented `env` block in `release.yml`) to sign.
