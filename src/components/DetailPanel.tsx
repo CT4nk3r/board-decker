@@ -23,6 +23,7 @@ import {
   type WorkItem,
 } from "@/lib/ado";
 import { cn, formatDate } from "@/lib/utils";
+import { sanitizeAdoHtml } from "@/lib/sanitize";
 import { openExternal } from "@/lib/open";
 import { AssigneePicker } from "@/components/AssigneePicker";
 import { Avatar } from "@/components/ui/avatar";
@@ -305,7 +306,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
               placeholder="Supports HTML…"
             />
           ) : item.descriptionHtml ? (
-            <div className="ado-html" dangerouslySetInnerHTML={{ __html: item.descriptionHtml }} />
+            <div className="ado-html" dangerouslySetInnerHTML={{ __html: sanitizeAdoHtml(item.descriptionHtml) }} />
           ) : (
             <p className="text-sm text-faint">No description.</p>
           )}
@@ -354,7 +355,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
                   </div>
                   <div
                     className="ado-html mt-0.5 text-[13px]"
-                    dangerouslySetInnerHTML={{ __html: c.text }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeAdoHtml(c.text) }}
                   />
                 </div>
               </div>

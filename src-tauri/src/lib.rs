@@ -73,6 +73,13 @@ async fn perform(
     let m = reqwest::Method::from_bytes(method.to_uppercase().as_bytes())
         .map_err(|e| format!("invalid HTTP method: {e}"))?;
 
+    // Gate every PAT-bearing request: refuse non-Azure DevOps hosts before the
+    // Authorization header is attached, so attacker-controlled work-item HTML
+    // can't redirect the proxy and exfiltrate the token to a third party.
+    if !is_azure_host(&url) {
+        return Err("Refusing to send credentials to a non-Azure DevOps host.".to_string());
+    }
+
     let mut req = client
         .request(m, &url)
         .header(reqwest::header::AUTHORIZATION, auth_header(&pat))
@@ -90,7 +97,9 @@ async fn perform(
 
     let resp = req.send().await.map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
-    let ok = resp.status().is_success();
+    // ADO answers a bad/expired PAT with 203 Non-Authoritative + an HTML sign-in
+    // page, so treat 203 as a failure rather than a "successful" empty result.
+    let ok = resp.status().is_success() && status != 203;
     let text = resp.text().await.map_err(|e| e.to_string())?;
     let parsed = if text.trim().is_empty() {
         serde_json::Value::Null

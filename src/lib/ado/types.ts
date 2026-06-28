@@ -32,6 +32,8 @@ export interface AdoConnection {
   project: string;
   /** Optional team for iteration (sprint) queries; defaults to project default team. */
   team?: string;
+  /** Non-secret identity fingerprint (ADO project id) captured at validation; keys the cache. */
+  identity?: string;
 }
 
 /** A work item type as defined by the project's process. */

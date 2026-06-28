@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { KeyRound, ArrowRight, ExternalLink, AlertTriangle } from "lucide-react";
 import { useConnectionStore } from "@/store/connection";
 import { validateConnection, savePat, AdoError } from "@/lib/ado";
+import { queryClient } from "@/lib/queryClient";
 import { openExternal } from "@/lib/open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +32,12 @@ export function Onboarding() {
     }
     setBusy(true);
     try {
-      await validateConnection(conn, pat.trim());
+      const project = await validateConnection(conn, pat.trim());
       await savePat(pat.trim());
-      setConnection(conn);
+      // Drop any cache from a prior session so a reconnecting user never sees
+      // the previous identity's data; pin the connection to that identity.
+      queryClient.clear();
+      setConnection({ ...conn, identity: project.id });
       // App re-gates to the board once the connection is set.
     } catch (err) {
       const msg =
