@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Playwright / e2e (generated)
+/test-results
+/playwright-report
+/e2e/.output
+/e2e/screenshots
+
 # Environment / secrets
 .env
 .env.*
