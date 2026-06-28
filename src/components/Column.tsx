@@ -20,7 +20,9 @@ const CARD_ESTIMATE = 96;
 
 export function Column({ column, items, typeColors, disabled, onOpen, onDelete }: ColumnProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled });
+  // Stay a registered droppable even when invalid: removing it from collision
+  // detection would let drops land on a neighbor. Board gates invalid moves.
+  const { setNodeRef, isOver } = useDroppable({ id: column.name });
   const dot = adoColor(column.color, "#6b6e78");
 
   // Only render the cards in view so columns with thousands of items stay smooth.
