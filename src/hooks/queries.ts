@@ -101,3 +101,20 @@ export function useIterations() {
     queryFn: () => ado.getIterations(conn!),
   });
 }
+
+/**
+ * An ADO avatar image resolved to a base64 `data:` URL (fetched through Rust so
+ * the PAT is attached). Keyed by URL and cached indefinitely, so the same person
+ * across many cards triggers a single request. Returns `null` until resolved.
+ */
+export function useAvatarImage(url?: string | null) {
+  const conn = useConnectionStore((s) => s.connection);
+  return useQuery({
+    queryKey: url ? keys.avatar(url) : ["avatar", "none"],
+    enabled: !!conn && !!url,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+    queryFn: () => ado.fetchAdoImage(url!),
+  });
+}
