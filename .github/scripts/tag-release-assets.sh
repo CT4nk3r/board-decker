@@ -57,4 +57,8 @@ while IFS=$'\t' read -r id name; do
   renamed=$((renamed + 1))
 done < <(gh api "repos/$repo/releases/tags/$tag" --jq '.assets[] | "\(.id)\t\(.name)"')
 
-echo "done ($renamed asset(s) ${dry:+would be }renamed)"
+if [ "$dry" = "1" ]; then
+  echo "done ($renamed asset(s) would be renamed)"
+else
+  echo "done ($renamed asset(s) renamed)"
+fi
