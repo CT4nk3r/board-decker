@@ -10,6 +10,7 @@ test.use({ viewport: { width: 1100, height: 800 } });
 
 async function seed(page: Page, board: BoardSeed) {
   await page.addInitScript((b) => {
+    window.localStorage.setItem("deck.connection", JSON.stringify({ state: { connection: { org: "o", project: "p" } }, version: 0 }));
     window.localStorage.setItem("deck.board", JSON.stringify({ state: { scope: { id: "all" }, view: "board" }, version: 0 }));
     (window as unknown as { __board: BoardSeed }).__board = b;
   }, board);

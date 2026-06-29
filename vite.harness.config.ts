@@ -10,7 +10,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@tauri-apps/api/core": path.resolve(__dirname, "./e2e/harness/mocks/ado-invoke.ts"),
       "@": path.resolve(__dirname, "./src"),
       "@tauri-apps/plugin-updater": path.resolve(
         __dirname,
