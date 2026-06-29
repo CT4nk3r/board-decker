@@ -6,7 +6,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invokeMock
 import { validateConnection } from "./client";
 import { updateWorkItem } from "./client";
 import { isConflict } from "@/hooks/writePath";
-import type { AdoConnection, AdoPatchOp } from "./types";
+import type { AdoConnection } from "./types";
+import type { AdoPatchOp } from "./fields";
 
 const conn = { org: "o", project: "p" };
 beforeEach(() => invokeMock.mockReset());
