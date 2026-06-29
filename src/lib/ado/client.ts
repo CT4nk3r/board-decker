@@ -230,7 +230,9 @@ export async function getProjectMembers(conn: AdoConnection): Promise<AdoUser[]>
 
   const byKey = new Map<string, AdoUser>();
   let failures = 0;
-  const CONCURRENCY = 8;
+  // Member fan-out runs against rate-limited list endpoints; keep it modest so
+  // large orgs (many teams) don't trip 429s. adoRequest backs off on throttle.
+  const CONCURRENCY = 4;
 
   for (let i = 0; i < teams.length; i += CONCURRENCY) {
     const batch = teams.slice(i, i + CONCURRENCY);
