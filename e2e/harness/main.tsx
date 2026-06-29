@@ -3,9 +3,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import { UpdateButton } from "@/components/UpdateButton";
 import { Sidebar } from "@/components/Sidebar";
+import { DetailPanel } from "@/components/DetailPanel";
+import { CreateDialog } from "@/components/CreateDialog";
+import { Toaster } from "@/components/ui/toast";
 import { sanitizeAdoHtml } from "@/lib/sanitize";
 import { queryClient } from "@/lib/queryClient";
 import { useConnectionStore } from "@/store/connection";
+import { useBoardStore } from "@/store/board";
 
 // __TAURI_INTERNALS__ is set by an inline script in index.html (before this
 // module loads) so UpdateButton's module-level `inTauri` guard sees it.
@@ -51,12 +55,38 @@ function SignOutPanel() {
   );
 }
 
+// Mounts a real write-path component with a seeded connection so e2e can prove
+// comment drafts survive failures and out-of-scope creates aren't faked in.
+function withProviders(node: React.ReactNode) {
+  useConnectionStore.getState().setConnection({ org: "demo", project: "Proj" });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-bg">{node}</div>
+      <Toaster />
+    </QueryClientProvider>
+  );
+}
+
 const panel = new URLSearchParams(window.location.search).get("panel");
 if (panel === "signout") {
   // Seed once before mount so the post-sign-out render reflects a cleared cache.
   useConnectionStore.setState({ connection: { org: "o", project: "p", identity: "id-1" } });
   queryClient.setQueryData(["board-items", "id-1", "o", "p"], [{ id: 1 }]);
 }
-const App = panel === "sanitize" ? SanitizePanel : panel === "signout" ? SignOutPanel : UpdaterPanel;
+
+function App() {
+  if (panel === "sanitize") return <SanitizePanel />;
+  if (panel === "signout") return <SignOutPanel />;
+  if (panel === "comment") {
+    useBoardStore.getState().select(1);
+    return withProviders(<DetailPanel />);
+  }
+  if (panel === "create") {
+    useBoardStore.getState().setScope({ id: "assigned-to-me" });
+    useBoardStore.getState().setCreateOpen(true);
+    return withProviders(<CreateDialog />);
+  }
+  return <UpdaterPanel />;
+}
 
 createRoot(document.getElementById("root")!).render(<App />);

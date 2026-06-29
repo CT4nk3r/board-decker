@@ -104,7 +104,7 @@ export function Board() {
       toast.error("Invalid move", `A ${item.type} can't be set to "${targetState}".`);
       return;
     }
-    changeState.mutate({ id, state: targetState });
+    changeState.mutate({ id, state: targetState, rev: item.rev });
   }
 
   async function handleDelete() {

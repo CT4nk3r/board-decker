@@ -2,14 +2,33 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import * as ado from "@/lib/ado";
-import type { AdoPatchOp, WorkItem } from "@/lib/ado";
+import { type AdoPatchOp, type WorkItem } from "@/lib/ado";
 import { toast } from "@/components/ui/toast";
 import { keys } from "./keys";
+import { applyState, isConflict, matchesScope, revertState } from "./writePath";
+
+/** Latest known rev from cache (detail wins, else board), so queued saves don't self-conflict. */
+function latestRev(
+  qc: ReturnType<typeof useQueryClient>,
+  conn: ado.AdoConnection,
+  id: number,
+  fallback?: number,
+): number | undefined {
+  const detail = qc.getQueryData<WorkItem>(keys.workItem(conn, id));
+  if (detail?.rev != null) return detail.rev;
+  for (const [, items] of qc.getQueriesData<WorkItem[]>({ queryKey: keys.boardAll(conn) })) {
+    const found = items?.find((w) => w.id === id);
+    if (found?.rev != null) return found.rev;
+  }
+  return fallback;
+}
 
 /**
  * Drag-to-change-state. Optimistically moves the card to the target column and
- * rolls back (with a toast) if ADO rejects the change. This is the locked
- * "full two-way from the start" behavior.
+ * rolls back (with a toast) if ADO rejects the change. Sends a `rev` guard so a
+ * concurrent edit is detected, reverts only when the card is still where we left
+ * it (so a newer success isn't clobbered), and always invalidates on settle.
+ * Writes share a scope so per-item mutations serialize instead of racing.
  */
 export function useChangeState() {
   const qc = useQueryClient();
@@ -18,25 +37,32 @@ export function useChangeState() {
   const key = keys.board(conn, scope);
 
   return useMutation({
-    mutationFn: ({ id, state }: { id: number; state: string }) =>
-      ado.updateWorkItem(conn, id, ado.stateChangeOps(state)),
+    scope: { id: "work-item-write" },
+    mutationFn: ({ id, state, rev }: { id: number; state: string; rev?: number }) =>
+      ado.updateWorkItem(conn, id, ado.stateChangeOps(state), latestRev(qc, conn, id, rev)),
     onMutate: async ({ id, state }) => {
       await qc.cancelQueries({ queryKey: key });
-      const previous = qc.getQueryData<WorkItem[]>(key);
-      qc.setQueryData<WorkItem[]>(key, (old) =>
-        old?.map((w) => (w.id === id ? { ...w, state } : w)),
-      );
-      return { previous };
+      const previous = qc.getQueryData<WorkItem[]>(key)?.find((w) => w.id === id);
+      qc.setQueryData<WorkItem[]>(key, (old) => applyState(old, id, state));
+      return { previous, target: state };
     },
-    onError: (err, _vars, ctx) => {
-      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
-      toast.error("Couldn't update state", (err as Error).message);
+    onError: (err, { id }, ctx) => {
+      qc.setQueryData<WorkItem[]>(key, (old) => revertState(old, id, ctx!.target, ctx?.previous));
+      if (isConflict(err)) {
+        toast.error("Work item changed elsewhere", "Reloaded the latest — try the move again.");
+      } else {
+        toast.error("Couldn't update state", (err as Error).message);
+      }
     },
     onSuccess: (updated) => {
       qc.setQueryData<WorkItem[]>(key, (old) =>
         old?.map((w) => (w.id === updated.id ? { ...w, ...updated } : w)),
       );
       qc.setQueryData(keys.workItem(conn, updated.id), updated);
+    },
+    onSettled: (_d, _e, { id }) => {
+      qc.invalidateQueries({ queryKey: keys.workItem(conn, id) });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -47,8 +73,9 @@ export function useUpdateWorkItem() {
   const conn = useConnectionStore((s) => s.connection)!;
 
   return useMutation({
-    mutationFn: ({ id, ops }: { id: number; ops: AdoPatchOp[] }) =>
-      ado.updateWorkItem(conn, id, ops),
+    scope: { id: "work-item-write" },
+    mutationFn: ({ id, ops, rev }: { id: number; ops: AdoPatchOp[]; rev?: number }) =>
+      ado.updateWorkItem(conn, id, ops, latestRev(qc, conn, id, rev)),
     onSuccess: (updated) => {
       qc.setQueryData(keys.workItem(conn, updated.id), updated);
       qc.setQueriesData<WorkItem[]>({ queryKey: keys.boardAll(conn) }, (old) =>
@@ -56,7 +83,14 @@ export function useUpdateWorkItem() {
       );
       toast.success("Changes saved");
     },
-    onError: (err) => toast.error("Couldn't save changes", (err as Error).message),
+    onError: (err) =>
+      isConflict(err)
+        ? toast.error("Work item changed elsewhere", "Reloaded the latest — reapply your edit.")
+        : toast.error("Couldn't save changes", (err as Error).message),
+    onSettled: (_d, _e, { id }) => {
+      qc.invalidateQueries({ queryKey: keys.workItem(conn, id) });
+      qc.invalidateQueries({ queryKey: keys.boardAll(conn) });
+    },
   });
 }
 
@@ -71,8 +105,15 @@ export function useCreateWorkItem() {
     mutationFn: ({ type, ops }: { type: string; ops: AdoPatchOp[] }) =>
       ado.createWorkItem(conn, type, ops),
     onSuccess: (created) => {
-      qc.setQueryData<WorkItem[]>(key, (old) => (old ? [created, ...old] : [created]));
-      toast.success("Work item created", `#${created.id} · ${created.title}`);
+      // Only seed the board cache when the item matches the active scope;
+      // otherwise refetch so a created-but-out-of-view item isn't a phantom card.
+      if (matchesScope(created, scope, conn.project)) {
+        qc.setQueryData<WorkItem[]>(key, (old) => (old ? [created, ...old] : [created]));
+        toast.success("Work item created", `#${created.id} · ${created.title}`);
+      } else {
+        qc.invalidateQueries({ queryKey: key });
+        toast.success("Work item created", `#${created.id} · not in this view`);
+      }
     },
     onError: (err) => toast.error("Couldn't create work item", (err as Error).message),
   });

@@ -13,6 +13,7 @@ import {
 import { useBoardStore } from "@/store/board";
 import { useComments, useColumns, useIterations, useWorkItemDetail } from "@/hooks/queries";
 import { useAddComment, useDeleteWorkItem, useUpdateWorkItem } from "@/hooks/mutations";
+import { submitDraft } from "@/hooks/writePath";
 import {
   FIELD,
   setField,
@@ -104,7 +105,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
   }, [item]);
 
   function save(ops: AdoPatchOp[]) {
-    if (ops.length) update.mutate({ id, ops });
+    if (ops.length) update.mutate({ id, ops, rev: item?.rev });
   }
 
   async function handleDelete() {
@@ -370,10 +371,7 @@ function DetailContent({ id, onClose }: { id: number; onClose: () => void }) {
             onChange={setCommentDraft}
             pending={addComment.isPending}
             onSend={async () => {
-              const text = commentDraft.trim();
-              if (!text) return;
-              await addComment.mutateAsync(text).catch(() => {});
-              setCommentDraft("");
+              await submitDraft(addComment.mutateAsync, commentDraft, () => setCommentDraft(""));
             }}
           />
         </div>

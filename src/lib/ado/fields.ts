@@ -35,6 +35,14 @@ export function setField(refName: string, value: unknown): AdoPatchOp {
   return { op: "add", path: `/fields/${refName}`, value };
 }
 
+/**
+ * Optimistic-concurrency guard: ADO rejects the patch (409/412) unless the item
+ * is still at this revision. Prepend before field ops to detect lost updates.
+ */
+export function revTest(rev: number): AdoPatchOp {
+  return { op: "test", path: "/rev", value: rev };
+}
+
 /** Convenience: patch op to change `System.State`. */
 export function stateChangeOps(newState: string): AdoPatchOp[] {
   return [setField(FIELD.State, newState)];
