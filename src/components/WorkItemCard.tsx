@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { GitBranch, PanelRight, ExternalLink, Trash2 } from "lucide-react";
+import { PanelRight, ExternalLink, Trash2 } from "lucide-react";
 import type { WorkItem } from "@/lib/ado";
 import { cn, adoColor } from "@/lib/utils";
 import { openExternal } from "@/lib/open";
@@ -28,9 +28,6 @@ interface BodyProps {
 /** Presentational card body, shared by the draggable card and the drag overlay. */
 export function WorkItemCardBody({ item, typeColor, dragging, onClick }: BodyProps) {
   const priority = item.priority ? PRIORITY_LABEL[item.priority] : undefined;
-  const hasPr = item.raw.relations?.some(
-    (r) => r.rel === "ArtifactLink" && /PullRequestId/i.test(r.url),
-  );
 
   return (
     <div
@@ -50,7 +47,6 @@ export function WorkItemCardBody({ item, typeColor, dragging, onClick }: BodyPro
         <span className="text-[11px] font-medium text-faint">
           {item.type} · #{item.id}
         </span>
-        {hasPr && <GitBranch size={12} className="ml-auto text-faint" />}
       </div>
 
       <p className="line-clamp-3 text-[13px] font-medium leading-snug text-fg">{item.title}</p>

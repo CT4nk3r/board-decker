@@ -48,4 +48,10 @@ describe("parseDevLinks", () => {
   it("tolerates undefined", () => {
     expect(parseDevLinks(undefined)).toEqual([]);
   });
+
+  it("does not throw on malformed percent-encoding and still classifies the PR (#12)", () => {
+    const links = parseDevLinks([{ rel: "ArtifactLink", url: "vstfs:///Git/PullRequestId/%E0%A4%A" }]);
+    expect(links).toHaveLength(1);
+    expect(links[0].kind).toBe("pullRequest");
+  });
 });
