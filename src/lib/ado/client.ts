@@ -4,7 +4,7 @@
  * Ported in spirit from the ado-plane-sync `azureDevOps.ts` client.
  */
 
-import { adoRequest } from "./invoke";
+import { adoRequest, AdoError } from "./invoke";
 import { mapWorkItem, normalizeAdoUser } from "./mapper";
 import { CARD_FIELDS, JSON_PATCH_CONTENT_TYPE, type AdoPatchOp } from "./fields";
 import type {
@@ -42,8 +42,13 @@ export async function validateConnection(
   pat: string,
 ): Promise<{ id: string; name: string }> {
   const url = withVersion(`${orgBase(conn)}/_apis/projects/${enc(conn.project)}`);
-  const project = await adoRequest<{ id: string; name: string }>({ method: "GET", url, pat });
-  return project;
+  const project = await adoRequest<{ id?: unknown; name?: unknown }>({ method: "GET", url, pat });
+  // A bad PAT can yield a 2xx HTML body that isn't a real project; require the
+  // ADO project shape so onboarding can't be fooled into storing junk creds.
+  if (!project || typeof project.id !== "string" || typeof project.name !== "string") {
+    throw new AdoError("Authentication failed (check your PAT and its scopes).", 203, project);
+  }
+  return { id: project.id, name: project.name };
 }
 
 /** Run a WIQL query, returning the matching work item ids (in query order). */

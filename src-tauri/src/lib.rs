@@ -73,6 +73,13 @@ async fn perform(
     let m = reqwest::Method::from_bytes(method.to_uppercase().as_bytes())
         .map_err(|e| format!("invalid HTTP method: {e}"))?;
 
+    // Gate every PAT-bearing request: refuse non-Azure DevOps hosts before the
+    // Authorization header is attached, so attacker-controlled work-item HTML
+    // can't redirect the proxy and exfiltrate the token to a third party.
+    if !is_azure_host(&url) {
+        return Err("Refusing to send credentials to a non-Azure DevOps host.".to_string());
+    }
+
     let mut req = client
         .request(m, &url)
         .header(reqwest::header::AUTHORIZATION, auth_header(&pat))
@@ -90,7 +97,9 @@ async fn perform(
 
     let resp = req.send().await.map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
-    let ok = resp.status().is_success();
+    // ADO answers a bad/expired PAT with 203 Non-Authoritative + an HTML sign-in
+    // page, so treat 203 as a failure rather than a "successful" empty result.
+    let ok = resp.status().is_success() && status != 203;
     let text = resp.text().await.map_err(|e| e.to_string())?;
     let parsed = if text.trim().is_empty() {
         serde_json::Value::Null
@@ -142,11 +151,13 @@ struct ImageResponse {
 
 /// Only ever attach the PAT to genuine Azure DevOps hosts, so a poisoned avatar
 /// URL in a work item payload can't exfiltrate the token to a third party.
+/// Scoped tightly to ADO endpoints (not all of `*.azure.com`) to shrink blast radius.
 fn is_azure_host(url: &str) -> bool {
     match reqwest::Url::parse(url) {
         Ok(parsed) => parsed.scheme() == "https" && matches!(parsed.host_str(), Some(host)
             if host == "dev.azure.com"
-                || host.ends_with(".azure.com")
+                || host.ends_with(".dev.azure.com")
+                || host == "visualstudio.com"
                 || host.ends_with(".visualstudio.com")),
         Err(_) => false,
     }
@@ -223,4 +234,25 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_azure_host;
+
+    #[test]
+    fn allows_real_ado_hosts() {
+        assert!(is_azure_host("https://dev.azure.com/contoso/project"));
+        assert!(is_azure_host("https://contoso.visualstudio.com/foo"));
+        assert!(is_azure_host("https://vssps.dev.azure.com/x"));
+    }
+
+    #[test]
+    fn rejects_foreign_and_insecure_hosts() {
+        assert!(!is_azure_host("https://evil.com"));
+        assert!(!is_azure_host("http://dev.azure.com")); // not https
+        assert!(!is_azure_host("https://dev.azure.com.evil.com")); // suffix spoof
+        assert!(!is_azure_host("https://dev.azure.com@evil.com")); // userinfo trick
+        assert!(!is_azure_host("not a url"));
+    }
 }

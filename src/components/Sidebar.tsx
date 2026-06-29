@@ -4,6 +4,7 @@ import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import { useIterations } from "@/hooks/queries";
 import { deletePat, type ScopeId } from "@/lib/ado";
+import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -47,6 +48,7 @@ export function Sidebar() {
 
   async function signOut() {
     await deletePat().catch(() => {});
+    queryClient.clear();
     clear();
   }
 

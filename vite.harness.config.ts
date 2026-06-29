@@ -19,6 +19,10 @@ export default defineConfig({
         __dirname,
         "./e2e/harness/mocks/plugin-process.ts",
       ),
+      "@tauri-apps/api/core": path.resolve(
+        __dirname,
+        "./e2e/harness/mocks/core.ts",
+      ),
     },
   },
   server: { port: 5599, strictPort: true },

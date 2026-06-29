@@ -64,8 +64,12 @@ export async function adoRequest<T = unknown>(init: AdoRequestInit): Promise<T> 
   if (init.pat) args.pat = init.pat;
 
   const res = await invoke<AdoResponse<T>>(command, args);
-  if (!res.ok) {
-    throw new AdoError(extractMessage(res.status, res.body), res.status, res.body);
+  // ADO answers a bad/expired PAT with 203 + an HTML sign-in page (sometimes
+  // even on a 2xx), so treat those as auth failures the client can react to.
+  const htmlSignIn = typeof res.body === "string" && /<html|<!doctype/i.test(res.body);
+  if (!res.ok || res.status === 203 || htmlSignIn) {
+    const status = res.ok && htmlSignIn ? 203 : res.status;
+    throw new AdoError(extractMessage(status, res.body), status, res.body);
   }
   return res.body;
 }

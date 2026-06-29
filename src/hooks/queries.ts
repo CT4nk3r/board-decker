@@ -125,7 +125,7 @@ export function useProjectMembers(enabled = true) {
 export function useAvatarImage(url?: string | null) {
   const conn = useConnectionStore((s) => s.connection);
   return useQuery({
-    queryKey: url ? keys.avatar(url) : ["avatar", "none"],
+    queryKey: url ? keys.avatar(conn ?? { org: "", project: "" }, url) : ["avatar", "none"],
     enabled: !!conn && !!url,
     staleTime: Infinity,
     gcTime: Infinity,
