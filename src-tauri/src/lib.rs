@@ -8,6 +8,12 @@
 
 use base64::Engine as _;
 use serde::Serialize;
+use std::time::Duration;
+
+/// Connect/total timeouts so a slow or hung ADO endpoint can't wedge a request
+/// forever (large orgs throttle; transient stalls shouldn't pin the worker).
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Keychain service + account under which the single active PAT is stored.
 const KEYRING_SERVICE: &str = "com.boarddecker.app";
@@ -67,6 +73,8 @@ async fn perform(
 ) -> Result<AdoResponse, String> {
     let client = reqwest::Client::builder()
         .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -178,6 +186,8 @@ async fn ado_fetch_image(url: String) -> Result<ImageResponse, String> {
 
     let client = reqwest::Client::builder()
         .user_agent("Board Decker/0.1 (+https://github.com/CT4nk3r/board-decker)")
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
 

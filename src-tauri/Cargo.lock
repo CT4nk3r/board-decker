@@ -308,6 +308,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "board-decker"
+version = "0.1.1"
+dependencies = [
+ "base64 0.22.1",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-updater",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -723,22 +739,6 @@ checksum = "708b509edf7889e53d7efb0ffadd994cc6c2345ccb62f55cfd6b0682165e4fa6"
 dependencies = [
  "dbus",
  "zeroize",
-]
-
-[[package]]
-name = "board-decker"
-version = "0.1.1"
-dependencies = [
- "base64 0.22.1",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-updater",
 ]
 
 [[package]]

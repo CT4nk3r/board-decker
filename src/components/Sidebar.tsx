@@ -1,11 +1,12 @@
-import { useMemo } from "react";
-import { User, Activity, Clock, PenLine, Layers, LogOut, CalendarRange, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { User, Activity, Clock, PenLine, Layers, LogOut, CalendarRange, X, FolderTree } from "lucide-react";
 import { useConnectionStore } from "@/store/connection";
 import { useBoardStore } from "@/store/board";
 import { useIterations } from "@/hooks/queries";
 import { deletePat, type ScopeId } from "@/lib/ado";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,21 @@ export function Sidebar() {
   const scope = useBoardStore((s) => s.scope);
   const setScope = useBoardStore((s) => s.setScope);
   const { data: iterations } = useIterations();
+
+  const [areaDraft, setAreaDraft] = useState(scope.id === "area" ? (scope.arg ?? "") : "");
+
+  // Keep the input in sync when the area scope changes elsewhere (persist
+  // hydration, programmatic scope switch) so it never shows a stale path.
+  useEffect(() => {
+    if (scope.id === "area") setAreaDraft(scope.arg ?? "");
+  }, [scope]);
+
+  function applyArea() {
+    const arg = iterationArg(areaDraft.trim(), connection.project);
+    if (arg) setScope({ id: "area", arg });
+    // Emptying the field while area is active should drop the filter, not strand it.
+    else if (scope.id === "area") setScope({ id: "active" });
+  }
 
   const sprintOptions = useMemo(
     () =>
@@ -123,6 +139,46 @@ export function Sidebar() {
               onClick={() => setScope({ id: "active" })}
               title="Clear sprint"
               aria-label="Clear sprint"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-faint transition-colors hover:border-border-strong hover:text-fg"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <p className="px-2 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-faint">
+          Area
+        </p>
+        <div className="flex items-center gap-1 px-1">
+          <div className="relative min-w-0 flex-1">
+            <FolderTree
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
+            />
+            <Input
+              value={areaDraft}
+              onChange={(e) => setAreaDraft(e.target.value)}
+              onBlur={applyArea}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyArea();
+                }
+              }}
+              placeholder="Filter by area path"
+              aria-label="Area path"
+              className="pl-8"
+            />
+          </div>
+          {scope.id === "area" && (
+            <button
+              type="button"
+              onClick={() => {
+                setAreaDraft("");
+                setScope({ id: "active" });
+              }}
+              title="Clear area"
+              aria-label="Clear area"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-faint transition-colors hover:border-border-strong hover:text-fg"
             >
               <X size={14} />
