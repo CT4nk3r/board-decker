@@ -1,6 +1,6 @@
 [package]
 name = "board-decker"
-version = "0.1.1"
+version = "0.1.3"
 description = "Board Decker — a native desktop board over Azure DevOps work items"
 authors = ["you"]
 edition = "2021"
